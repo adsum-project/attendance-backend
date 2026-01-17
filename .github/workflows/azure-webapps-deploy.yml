@@ -2,7 +2,7 @@ name: Build and deploy to Azure Web App
 
 env:
   AZURE_WEBAPP_NAME: "attendance-be"
-  ACR_NAME: "adsum"
+  ACR_NAME: "adsum-fwgkd4f4hcdfbbcb"
   IMAGE_NAME: "attendance-backend-go"
 
 on:
