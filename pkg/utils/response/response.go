@@ -7,13 +7,14 @@ import (
 
 type HttpErrorMessage struct {
 	StatusCode int    `json:"-"`
+	Success    bool   `json:"success"`
 	Message    string `json:"message,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Details    any    `json:"details,omitempty"`
 }
 
 type ApiResponse struct {
-	Status  string `json:"status"`
+	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	Data    any    `json:"data,omitempty"`
 	Error   string `json:"error,omitempty"`
@@ -46,16 +47,19 @@ func JsonError(w http.ResponseWriter, err any) {
 	case error:
 		errorMsg = HttpErrorMessage{
 			StatusCode: http.StatusInternalServerError,
+			Success:    false,
 			Error:      e.Error(),
 		}
 	case string:
 		errorMsg = HttpErrorMessage{
 			StatusCode: http.StatusInternalServerError,
+			Success:    false,
 			Error:      e,
 		}
 	default:
 		errorMsg = HttpErrorMessage{
 			StatusCode: http.StatusInternalServerError,
+			Success:    false,
 			Error:      "An unexpected error occurred",
 		}
 	}
@@ -63,6 +67,8 @@ func JsonError(w http.ResponseWriter, err any) {
 	if errorMsg.StatusCode == 0 {
 		errorMsg.StatusCode = http.StatusInternalServerError
 	}
+
+	errorMsg.Success = false
 
 	JsonResponse(w, errorMsg.StatusCode, errorMsg)
 }
@@ -73,7 +79,7 @@ func JsonSuccess(w http.ResponseWriter, statusCode int, message string, data any
 	}
 
 	resp := ApiResponse{
-		Status:  "success",
+		Success: true,
 		Message: message,
 		Data:    data,
 	}
@@ -87,7 +93,7 @@ func JsonSuccessWithMeta(w http.ResponseWriter, statusCode int, message string, 
 	}
 
 	resp := ApiResponse{
-		Status:  "success",
+		Success: true,
 		Message: message,
 		Data:    data,
 		Meta:    meta,

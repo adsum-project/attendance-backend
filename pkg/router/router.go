@@ -20,6 +20,7 @@ type Router struct {
 	mux *http.ServeMux
 	routes []Route
 	prefix string
+	globalMiddleware []Middleware
 }
 
 func NewRouter() *Router {
@@ -27,12 +28,16 @@ func NewRouter() *Router {
 		mux: http.NewServeMux(),
 		routes: []Route{},
 		prefix: "",
+		globalMiddleware: []Middleware{},
 	}
 }
 
 func (r *Router) createMuxHandlers() {
 	for _, route := range r.routes {
 		handler := route.handler
+		for _, middleware := range r.globalMiddleware {
+			handler = middleware(handler)
+		}
 		for _, middleware := range route.middleware {
 			handler = middleware(handler)
 		}
@@ -113,6 +118,10 @@ func (r *Router) Group(prefix string, methods func()) {
 	r.prefix = prevPrefix + prefix
 	methods()
 	r.prefix = prevPrefix
+}
+
+func (r *Router) Use(middleware Middleware) {
+	r.globalMiddleware = append(r.globalMiddleware, middleware)
 }
 
 func (r *Router) SetPrefix(prefix string) {
