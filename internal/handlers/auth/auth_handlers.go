@@ -2,29 +2,27 @@ package authhandlers
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"net/http"
-	"os"
 
+	"github.com/adsum-project/attendance-backend/internal/services/auth"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
 func (p *AuthProvider) Login(w http.ResponseWriter, r *http.Request) {
-	state, err := generateRandomString(32)
+	state, err := auth.GenerateRandomString(32)
 	if err != nil {
 		response.InternalServerError(w, "Failed to generate state: "+err.Error())
 		return
 	}
 
-	nonce, err := generateRandomString(32)
+	nonce, err := auth.GenerateRandomString(32)
 	if err != nil {
 		response.InternalServerError(w, "Failed to generate nonce: "+err.Error())
 		return
 	}
 
-	setStateCookie(w, state, p.auth.GetCookieDomain())
-	setNonceCookie(w, nonce, p.auth.GetCookieDomain())
+	p.auth.SetOAuthStateCookie(w, state)
+	p.auth.SetOAuthNonceCookie(w, nonce)
 
 	authURL := p.auth.AuthCodeURL(state, nonce)
 
@@ -45,7 +43,7 @@ func (p *AuthProvider) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stateCookie, err := r.Cookie("oauth_state")
+	stateCookie, err := r.Cookie(auth.OAuthStateCookieName)
 	if err != nil || stateCookie.Value != state {
 		response.Unauthorized(w, "Invalid state")
 		return
@@ -71,7 +69,7 @@ func (p *AuthProvider) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nonceCookie, err := r.Cookie("oauth_nonce")
+	nonceCookie, err := r.Cookie(auth.OAuthNonceCookieName)
 	if err != nil {
 		response.Unauthorized(w, "Missing nonce cookie")
 		return
@@ -95,8 +93,8 @@ func (p *AuthProvider) Callback(w http.ResponseWriter, r *http.Request) {
 
 	p.auth.SetSessionCookie(w, sessionID)
 
-	clearNonceCookie(w, p.auth.GetCookieDomain())
-	clearStateCookie(w, p.auth.GetCookieDomain())
+	p.auth.ClearOAuthNonceCookie(w)
+	p.auth.ClearOAuthStateCookie(w)
 
 	http.Redirect(w, r, p.frontendURL, http.StatusFound)
 }
@@ -118,6 +116,9 @@ func (p *AuthProvider) Me(w http.ResponseWriter, r *http.Request) {
 	if oid, ok := claims["oid"].(string); ok {
 		user["id"] = oid
 	}
+	if roles, ok := claims["roles"]; ok {
+		user["roles"] = roles
+	}
 
 	response.OK(w, "", map[string]interface{}{
 		"user": user,
@@ -132,65 +133,4 @@ func (p *AuthProvider) Logout(w http.ResponseWriter, r *http.Request) {
 	p.auth.ClearOAuthCookies(w)
 
 	response.NoContent(w)
-}
-
-// Helper functions
-func generateRandomString(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
-}
-
-func setNonceCookie(w http.ResponseWriter, nonce, domain string) {
-	cookie := &http.Cookie{
-		Name:     "oauth_nonce",
-		Value:    nonce,
-		Path:     "/",
-		Domain:   domain,
-		HttpOnly: true,
-		Secure:   os.Getenv("ENVIRONMENT") == "production",
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   600,
-	}
-	http.SetCookie(w, cookie)
-}
-
-func setStateCookie(w http.ResponseWriter, state, domain string) {
-	cookie := &http.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		Domain:   domain,
-		HttpOnly: true,
-		Secure:   os.Getenv("ENVIRONMENT") == "production",
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   600,
-	}
-	http.SetCookie(w, cookie)
-}
-
-func clearNonceCookie(w http.ResponseWriter, domain string) {
-	cookie := &http.Cookie{
-		Name:     "oauth_nonce",
-		Value:    "",
-		Path:     "/",
-		Domain:   domain,
-		HttpOnly: true,
-		MaxAge:   -1,
-	}
-	http.SetCookie(w, cookie)
-}
-
-func clearStateCookie(w http.ResponseWriter, domain string) {
-	cookie := &http.Cookie{
-		Name:     "oauth_state",
-		Value:    "",
-		Path:     "/",
-		Domain:   domain,
-		HttpOnly: true,
-		MaxAge:   -1,
-	}
-	http.SetCookie(w, cookie)
 }

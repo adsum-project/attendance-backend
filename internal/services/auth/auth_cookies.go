@@ -7,9 +7,16 @@ import (
 )
 
 const (
-	DefaultCookieName   = "session"
-	DefaultCookieMaxAge = 60 * 60 * 24 * 7
+	DefaultCookieName    = "session"
+	DefaultCookieMaxAge  = 60 * 60 * 24 * 7
+	OAuthStateCookieName = "oauth_state"
+	OAuthNonceCookieName = "oauth_nonce"
+	OAuthCookieMaxAge    = 600
 )
+
+func (a *Auth) GetCookieDomain() string {
+	return a.cookieDomain
+}
 
 func (a *Auth) SetSessionCookie(w http.ResponseWriter, sessionToken string) {
 	cookie := &http.Cookie{
@@ -52,8 +59,38 @@ func (a *Auth) ClearSessionCookie(w http.ResponseWriter) {
 }
 
 func (a *Auth) ClearOAuthCookies(w http.ResponseWriter) {
-	clearCookie(w, "oauth_nonce", a.cookieDomain, a.isSecure())
-	clearCookie(w, "oauth_state", a.cookieDomain, a.isSecure())
+	clearCookie(w, OAuthNonceCookieName, a.cookieDomain, a.isSecure())
+	clearCookie(w, OAuthStateCookieName, a.cookieDomain, a.isSecure())
+}
+
+func (a *Auth) SetOAuthStateCookie(w http.ResponseWriter, state string) {
+	a.setOAuthCookie(w, OAuthStateCookieName, state)
+}
+
+func (a *Auth) SetOAuthNonceCookie(w http.ResponseWriter, nonce string) {
+	a.setOAuthCookie(w, OAuthNonceCookieName, nonce)
+}
+
+func (a *Auth) ClearOAuthStateCookie(w http.ResponseWriter) {
+	clearCookie(w, OAuthStateCookieName, a.cookieDomain, a.isSecure())
+}
+
+func (a *Auth) ClearOAuthNonceCookie(w http.ResponseWriter) {
+	clearCookie(w, OAuthNonceCookieName, a.cookieDomain, a.isSecure())
+}
+
+func (a *Auth) setOAuthCookie(w http.ResponseWriter, name, value string) {
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		Domain:   a.cookieDomain,
+		HttpOnly: true,
+		Secure:   a.isSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   OAuthCookieMaxAge,
+	}
+	http.SetCookie(w, cookie)
 }
 
 func clearCookie(w http.ResponseWriter, name, domain string, secure bool) {
@@ -71,23 +108,6 @@ func clearCookie(w http.ResponseWriter, name, domain string, secure bool) {
 	http.SetCookie(w, cookie)
 }
 
-func (a *Auth) GetUserIDFromClaims(claims map[string]interface{}) string {
-	if claims == nil {
-		return ""
-	}
-	// Try to get 'oid' (object ID) first, fallback to 'sub'
-	if oid, ok := claims["oid"].(string); ok && oid != "" {
-		return oid
-	}
-	if sub, ok := claims["sub"].(string); ok && sub != "" {
-		return sub
-	}
-	return ""
-}
-
 func (a *Auth) isSecure() bool {
-	if os.Getenv("ENVIRONMENT") == "production" {
-		return true
-	}
-	return false
+	return os.Getenv("ENVIRONMENT") == "production"
 }

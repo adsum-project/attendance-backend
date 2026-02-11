@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/adsum-project/attendance-backend/internal/handlers"
@@ -11,23 +12,23 @@ type Middleware func(Handler) Handler
 
 type Route struct {
 	httpMethod string
-	pattern string
-	handler Handler
+	pattern    string
+	handler    Handler
 	middleware []Middleware
 }
 
 type Router struct {
-	mux *http.ServeMux
-	routes []Route
-	prefix string
+	mux              *http.ServeMux
+	routes           []Route
+	prefix           string
 	globalMiddleware []Middleware
 }
 
 func NewRouter() *Router {
 	return &Router{
-		mux: http.NewServeMux(),
-		routes: []Route{},
-		prefix: "",
+		mux:              http.NewServeMux(),
+		routes:           []Route{},
+		prefix:           "",
 		globalMiddleware: []Middleware{},
 	}
 }
@@ -35,13 +36,10 @@ func NewRouter() *Router {
 func (r *Router) createMuxHandlers() {
 	for _, route := range r.routes {
 		handler := route.handler
-		for _, middleware := range r.globalMiddleware {
-			handler = middleware(handler)
-		}
 		for _, middleware := range route.middleware {
 			handler = middleware(handler)
 		}
-		
+
 		r.mux.HandleFunc(route.pattern, func(w http.ResponseWriter, req *http.Request) {
 			if route.httpMethod != "" && route.httpMethod != req.Method {
 				handlers.MethodNotAllowed(w, req)
@@ -54,32 +52,39 @@ func (r *Router) createMuxHandlers() {
 
 func (r *Router) StartServer(addr string) {
 	r.createMuxHandlers()
-	
-	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+	baseHandler := func(w http.ResponseWriter, req *http.Request) {
+		defer fmt.Println("Server started on ", addr)
+
 		path := req.URL.Path
 		method := req.Method
-		
+
 		if r.pathNotExists(path) {
 			handlers.NotFound(w, req)
 			return
 		}
-		
+
 		if r.methodNotAllowed(path, method) {
 			handlers.MethodNotAllowed(w, req)
 			return
 		}
-		
+
 		r.mux.ServeHTTP(w, req)
-	})
-	
-	http.ListenAndServe(addr, handler)
+	}
+
+	handler := baseHandler
+	for _, middleware := range r.globalMiddleware {
+		handler = middleware(handler)
+	}
+
+	http.ListenAndServe(addr, http.HandlerFunc(handler))
 }
 
 func (r *Router) createRoute(httpMethod string, pattern string, handler Handler) *Route {
 	route := &Route{
 		httpMethod: httpMethod,
-		pattern: r.prefix + pattern,
-		handler: handler,
+		pattern:    r.prefix + pattern,
+		handler:    handler,
 		middleware: []Middleware{},
 	}
 

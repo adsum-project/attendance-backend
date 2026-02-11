@@ -9,11 +9,13 @@ import (
 
 	"github.com/adsum-project/attendance-backend/internal/db"
 	authhandlers "github.com/adsum-project/attendance-backend/internal/handlers/auth"
+	verificationhandlers "github.com/adsum-project/attendance-backend/internal/handlers/verification"
 	"github.com/adsum-project/attendance-backend/internal/middleware"
 	authrepo "github.com/adsum-project/attendance-backend/internal/repo/auth"
 	"github.com/adsum-project/attendance-backend/internal/services/auth"
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils"
+	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 	"github.com/joho/godotenv"
 )
 
@@ -45,6 +47,7 @@ func main() {
 	})
 
 	r.Use(corsMiddleware)
+	r.Use(middleware.NewRequestLogger())
 
 	dbConn, err := db.OpenFromEnv()
 	if err != nil {
@@ -67,6 +70,13 @@ func main() {
 		log.Fatal("Error initializing auth provider: ", err)
 	}
 
+	verificationProvider, err := verificationhandlers.NewVerificationProvider()
+	if err != nil {
+		log.Fatal("Error initializing verification provider: ", err)
+	}
+
+	serverStartTime := time.Now().Format(time.RFC3339)
+
 	r.Group("/v1/auth", func() {
 		r.Get("/login", authProvider.Login).Use(middleware.RequireNoAuth(authService))
 		r.Get("/callback", authProvider.Callback).Use(middleware.RequireNoAuth(authService))
@@ -74,14 +84,13 @@ func main() {
 		r.Get("/me", authProvider.Me).Use(middleware.RequireAuth(authService))
 	})
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Hello, World!"))
+	r.Group("/v1/verification", func() {
+		r.Post("/embeddings", verificationProvider.CreateEmbedding).Use(middleware.RequireAuth(authService))
+		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
 	})
 
-	r.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Hello, World2!"))
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		response.OK(w, "API is running", map[string]string{"since": serverStartTime})
 	})
 
 	r.StartServer(":8080")

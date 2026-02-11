@@ -32,15 +32,6 @@ type SessionRepository struct {
 	sessionTTL time.Duration
 }
 
-// Expected schema:
-// CREATE TABLE auth_sessions (
-//
-//	id TEXT PRIMARY KEY,
-//	user_id TEXT NOT NULL,
-//	claims_json TEXT NOT NULL,
-//	expires_at TIMESTAMP NOT NULL
-//
-// );
 func NewSessionRepository(db *sqlx.DB, sessionTTL time.Duration) *SessionRepository {
 	return &SessionRepository{
 		db:         db,
