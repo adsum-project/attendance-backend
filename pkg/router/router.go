@@ -34,14 +34,29 @@ func NewRouter() *Router {
 }
 
 func (r *Router) createMuxHandlers() {
+	handlersByPattern := make(map[string]map[string]Handler)
 	for _, route := range r.routes {
-		handler := route.handler
-		for _, middleware := range route.middleware {
-			handler = middleware(handler)
+		if _, ok := handlersByPattern[route.pattern]; !ok {
+			handlersByPattern[route.pattern] = make(map[string]Handler)
 		}
 
-		r.mux.HandleFunc(route.pattern, func(w http.ResponseWriter, req *http.Request) {
-			if route.httpMethod != "" && route.httpMethod != req.Method {
+		handler := route.handler
+		for _, m := range route.middleware {
+			handler = m(handler)
+		}
+		handlersByPattern[route.pattern][route.httpMethod] = handler
+	}
+
+	for pattern, methodHandlers := range handlersByPattern {
+		p := pattern
+		mh := methodHandlers
+
+		r.mux.HandleFunc(p, func(w http.ResponseWriter, req *http.Request) {
+			handler := mh[req.Method]
+			if handler == nil {
+				handler = mh[""]
+			}
+			if handler == nil {
 				handlers.MethodNotAllowed(w, req)
 				return
 			}
@@ -51,11 +66,10 @@ func (r *Router) createMuxHandlers() {
 }
 
 func (r *Router) StartServer(addr string) {
+	defer fmt.Println("Server started on ", addr)
 	r.createMuxHandlers()
 
 	baseHandler := func(w http.ResponseWriter, req *http.Request) {
-		defer fmt.Println("Server started on ", addr)
-
 		path := req.URL.Path
 		method := req.Method
 

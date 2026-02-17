@@ -194,6 +194,16 @@ func InternalServerError(w http.ResponseWriter, message string) {
 	})
 }
 
+func BadGateway(w http.ResponseWriter, message string) {
+	if message == "" {
+		message = "Bad gateway"
+	}
+	JsonError(w, HttpErrorMessage{
+		StatusCode: http.StatusBadGateway,
+		Error:      message,
+	})
+}
+
 func PaginatedResponse(w http.ResponseWriter, message string, data any, page, perPage, total int) {
 	totalPages := (total + perPage - 1) / perPage
 	meta := PaginationMeta{

@@ -85,7 +85,10 @@ func main() {
 	})
 
 	r.Group("/v1/verification", func() {
+		r.Get("/embeddings", verificationProvider.GetEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings", verificationProvider.CreateEmbedding).Use(middleware.RequireAuth(authService))
+		r.Put("/embeddings", verificationProvider.UpdateEmbedding).Use(middleware.RequireAuth(authService))
+		r.Delete("/embeddings", verificationProvider.DeleteEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
 	})
 
