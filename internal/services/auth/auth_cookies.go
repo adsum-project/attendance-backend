@@ -14,11 +14,11 @@ const (
 	OAuthCookieMaxAge    = 600
 )
 
-func (a *Auth) GetCookieDomain() string {
+func (a *AuthService) GetCookieDomain() string {
 	return a.cookieDomain
 }
 
-func (a *Auth) SetSessionCookie(w http.ResponseWriter, sessionToken string) {
+func (a *AuthService) SetSessionCookie(w http.ResponseWriter, sessionToken string) {
 	cookie := &http.Cookie{
 		Name:     DefaultCookieName,
 		Value:    sessionToken,
@@ -34,7 +34,7 @@ func (a *Auth) SetSessionCookie(w http.ResponseWriter, sessionToken string) {
 	http.SetCookie(w, cookie)
 }
 
-func (a *Auth) GetSessionCookie(r *http.Request) (string, error) {
+func (a *AuthService) GetSessionCookie(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(DefaultCookieName)
 	if err != nil {
 		return "", err
@@ -42,7 +42,7 @@ func (a *Auth) GetSessionCookie(r *http.Request) (string, error) {
 	return cookie.Value, nil
 }
 
-func (a *Auth) ClearSessionCookie(w http.ResponseWriter) {
+func (a *AuthService) ClearSessionCookie(w http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:     DefaultCookieName,
 		Value:    "",
@@ -58,28 +58,28 @@ func (a *Auth) ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, cookie)
 }
 
-func (a *Auth) ClearOAuthCookies(w http.ResponseWriter) {
+func (a *AuthService) ClearOAuthCookies(w http.ResponseWriter) {
 	clearCookie(w, OAuthNonceCookieName, a.cookieDomain, a.isSecure())
 	clearCookie(w, OAuthStateCookieName, a.cookieDomain, a.isSecure())
 }
 
-func (a *Auth) SetOAuthStateCookie(w http.ResponseWriter, state string) {
+func (a *AuthService) SetOAuthStateCookie(w http.ResponseWriter, state string) {
 	a.setOAuthCookie(w, OAuthStateCookieName, state)
 }
 
-func (a *Auth) SetOAuthNonceCookie(w http.ResponseWriter, nonce string) {
+func (a *AuthService) SetOAuthNonceCookie(w http.ResponseWriter, nonce string) {
 	a.setOAuthCookie(w, OAuthNonceCookieName, nonce)
 }
 
-func (a *Auth) ClearOAuthStateCookie(w http.ResponseWriter) {
+func (a *AuthService) ClearOAuthStateCookie(w http.ResponseWriter) {
 	clearCookie(w, OAuthStateCookieName, a.cookieDomain, a.isSecure())
 }
 
-func (a *Auth) ClearOAuthNonceCookie(w http.ResponseWriter) {
+func (a *AuthService) ClearOAuthNonceCookie(w http.ResponseWriter) {
 	clearCookie(w, OAuthNonceCookieName, a.cookieDomain, a.isSecure())
 }
 
-func (a *Auth) setOAuthCookie(w http.ResponseWriter, name, value string) {
+func (a *AuthService) setOAuthCookie(w http.ResponseWriter, name, value string) {
 	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -108,6 +108,6 @@ func clearCookie(w http.ResponseWriter, name, domain string, secure bool) {
 	http.SetCookie(w, cookie)
 }
 
-func (a *Auth) isSecure() bool {
+func (a *AuthService) isSecure() bool {
 	return os.Getenv("ENVIRONMENT") == "production"
 }

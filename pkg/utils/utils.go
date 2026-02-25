@@ -1,6 +1,8 @@
 package utils
 
-import "os"
+import (
+	"os"
+)
 
 func PtrSliceToDistinct[T comparable](slice []*T) []T {
 	_map := make(map[T]struct{})

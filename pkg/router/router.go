@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/adsum-project/attendance-backend/internal/handlers"
 )
@@ -34,42 +35,29 @@ func NewRouter() *Router {
 }
 
 func (r *Router) createMuxHandlers() {
-	handlersByPattern := make(map[string]map[string]Handler)
 	for _, route := range r.routes {
-		if _, ok := handlersByPattern[route.pattern]; !ok {
-			handlersByPattern[route.pattern] = make(map[string]Handler)
-		}
-
 		handler := route.handler
 		for _, m := range route.middleware {
 			handler = m(handler)
 		}
-		handlersByPattern[route.pattern][route.httpMethod] = handler
-	}
 
-	for pattern, methodHandlers := range handlersByPattern {
-		p := pattern
-		mh := methodHandlers
-
-		r.mux.HandleFunc(p, func(w http.ResponseWriter, req *http.Request) {
-			handler := mh[req.Method]
-			if handler == nil {
-				handler = mh[""]
-			}
-			if handler == nil {
-				handlers.MethodNotAllowed(w, req)
-				return
-			}
-			handler(w, req)
-		})
+		pattern := route.pattern
+		if route.httpMethod != "" {
+			pattern = route.httpMethod + " " + route.pattern
+		}
+		r.mux.HandleFunc(pattern, handler)
 	}
 }
 
 func (r *Router) StartServer(addr string) {
-	defer fmt.Println("Server started on ", addr)
+
 	r.createMuxHandlers()
 
 	baseHandler := func(w http.ResponseWriter, req *http.Request) {
+		if len(req.URL.Path) > 1 && strings.HasSuffix(req.URL.Path, "/") {
+			req.URL.Path = strings.TrimSuffix(req.URL.Path, "/")
+		}
+
 		path := req.URL.Path
 		method := req.Method
 
@@ -91,6 +79,7 @@ func (r *Router) StartServer(addr string) {
 		handler = middleware(handler)
 	}
 
+	fmt.Println("Server starting! Listening on", addr)
 	http.ListenAndServe(addr, http.HandlerFunc(handler))
 }
 

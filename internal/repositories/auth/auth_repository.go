@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/adsum-project/attendance-backend/internal/models/auth"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -19,13 +20,6 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExpired  = errors.New("session expired")
 )
-
-type Session struct {
-	ID        string
-	UserID    string
-	Claims    map[string]interface{}
-	ExpiresAt time.Time
-}
 
 type SessionRepository struct {
 	db         *sqlx.DB
@@ -73,7 +67,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID string, cl
 	return token, nil
 }
 
-func (r *SessionRepository) GetSession(ctx context.Context, token string) (*Session, error) {
+func (r *SessionRepository) GetSession(ctx context.Context, token string) (*authmodels.Session, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("db is required")
 	}
@@ -106,7 +100,7 @@ func (r *SessionRepository) GetSession(ctx context.Context, token string) (*Sess
 		return nil, fmt.Errorf("failed to parse claims: %w", err)
 	}
 
-	return &Session{
+	return &authmodels.Session{
 		ID:        token,
 		UserID:    userID,
 		Claims:    claims,

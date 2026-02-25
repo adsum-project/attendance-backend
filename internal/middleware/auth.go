@@ -6,10 +6,11 @@ import (
 
 	"github.com/adsum-project/attendance-backend/internal/services/auth"
 	"github.com/adsum-project/attendance-backend/pkg/router"
+	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
-func RequireAuth(a *auth.Auth) router.Middleware {
+func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
 	return func(handler router.Handler) router.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {
 			sessionID, err := a.GetSessionCookie(r)
@@ -37,12 +38,19 @@ func RequireAuth(a *auth.Auth) router.Middleware {
 			ctx = context.WithValue(ctx, "claims", session.Claims)
 			ctx = context.WithValue(ctx, "userID", session.UserID)
 
+			if len(roles) > 0 {
+				if hasRoles := authorization.HasRoles(ctx, roles...); !hasRoles {
+					response.Forbidden(w, "Forbidden")
+					return
+				}
+			}
+
 			handler(w, r.WithContext(ctx))
 		}
 	}
 }
 
-func RequireNoAuth(a *auth.Auth) router.Middleware {
+func RequireNoAuth(a *auth.AuthService) router.Middleware {
 	return func(handler router.Handler) router.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {
 			sessionID, err := a.GetSessionCookie(r)

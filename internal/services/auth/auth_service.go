@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"os"
 
-	authrepo "github.com/adsum-project/attendance-backend/internal/repo/auth"
+	authrepo "github.com/adsum-project/attendance-backend/internal/repositories/auth"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
 
-type Auth struct {
+type AuthService struct {
 	oauth2Config *oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	cookieDomain string
@@ -20,7 +20,7 @@ type Auth struct {
 
 var errSessionRepoMissing = errors.New("session repository is required")
 
-func NewAuth(sessionRepo *authrepo.SessionRepository) (*Auth, error) {
+func NewAuthService(sessionRepo *authrepo.SessionRepository) (*AuthService, error) {
 	if sessionRepo == nil {
 		return nil, errSessionRepoMissing
 	}
@@ -69,7 +69,7 @@ func NewAuth(sessionRepo *authrepo.SessionRepository) (*Auth, error) {
 		ClientID: clientID,
 	})
 
-	return &Auth{
+	return &AuthService{
 		oauth2Config: oauth2Config,
 		verifier:     verifier,
 		cookieDomain: cookieDomain,

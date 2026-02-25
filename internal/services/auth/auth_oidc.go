@@ -7,7 +7,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func (a *Auth) AuthCodeURL(state, nonce string) string {
+func (a *AuthService) AuthCodeURL(state, nonce string) string {
 	return a.oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("nonce", nonce),
@@ -15,11 +15,11 @@ func (a *Auth) AuthCodeURL(state, nonce string) string {
 	)
 }
 
-func (a *Auth) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
+func (a *AuthService) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
 	return a.oauth2Config.Exchange(ctx, code)
 }
 
-func (a *Auth) ValidateToken(ctx context.Context, tokenString string) (map[string]interface{}, error) {
+func (a *AuthService) ValidateToken(ctx context.Context, tokenString string) (map[string]interface{}, error) {
 	idToken, err := a.verifier.Verify(ctx, tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify token: %w", err)
@@ -33,7 +33,7 @@ func (a *Auth) ValidateToken(ctx context.Context, tokenString string) (map[strin
 	return claims, nil
 }
 
-func (a *Auth) GetUserIDFromClaims(claims map[string]interface{}) string {
+func (a *AuthService) GetUserIDFromClaims(claims map[string]interface{}) string {
 	if claims == nil {
 		return ""
 	}

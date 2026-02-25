@@ -9,10 +9,15 @@ import (
 
 	"github.com/adsum-project/attendance-backend/internal/db"
 	authhandlers "github.com/adsum-project/attendance-backend/internal/handlers/auth"
+	timetablehandlers "github.com/adsum-project/attendance-backend/internal/handlers/timetable"
+	userhandlers "github.com/adsum-project/attendance-backend/internal/handlers/user"
 	verificationhandlers "github.com/adsum-project/attendance-backend/internal/handlers/verification"
 	"github.com/adsum-project/attendance-backend/internal/middleware"
-	authrepo "github.com/adsum-project/attendance-backend/internal/repo/auth"
+	authrepo "github.com/adsum-project/attendance-backend/internal/repositories/auth"
+	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/internal/services/auth"
+	"github.com/adsum-project/attendance-backend/internal/services/graph"
+	"github.com/adsum-project/attendance-backend/internal/services/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -61,7 +66,7 @@ func main() {
 		dbProvider.DB,
 		time.Duration(auth.DefaultCookieMaxAge)*time.Second,
 	)
-	authService, err := auth.NewAuth(sessionRepo)
+	authService, err := auth.NewAuthService(sessionRepo)
 	if err != nil {
 		log.Fatal("Error initializing auth: ", err)
 	}
@@ -73,6 +78,25 @@ func main() {
 	verificationProvider, err := verificationhandlers.NewVerificationProvider()
 	if err != nil {
 		log.Fatal("Error initializing verification provider: ", err)
+	}
+
+	graphService, err := graph.NewGraphService()
+	if err != nil {
+		log.Fatal("Error initializing Graph service: ", err)
+	}
+
+	timetableRepo := timetablerepo.NewTimetableRepository(dbProvider.DB)
+	timetableService, err := timetable.NewTimetableService(timetableRepo, graphService)
+	if err != nil {
+		log.Fatal("Error initializing timetable service: ", err)
+	}
+	timetableProvider, err := timetablehandlers.NewTimetableProvider(timetableService)
+	if err != nil {
+		log.Fatal("Error initializing timetable provider: ", err)
+	}
+	userProvider, err := userhandlers.NewUserProvider(graphService)
+	if err != nil {
+		log.Fatal("Error initializing user provider: ", err)
 	}
 
 	serverStartTime := time.Now().Format(time.RFC3339)
@@ -90,6 +114,38 @@ func main() {
 		r.Put("/embeddings", verificationProvider.UpdateEmbedding).Use(middleware.RequireAuth(authService))
 		r.Delete("/embeddings", verificationProvider.DeleteEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
+	})
+
+	r.Group("/v1/timetable", func() {
+		r.Get("/courses", timetableProvider.GetCourses).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Get("/courses/{course_id}", timetableProvider.GetCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Post("/courses", timetableProvider.CreateCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Patch("/courses/{course_id}", timetableProvider.UpdateCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Delete("/courses/{course_id}", timetableProvider.DeleteCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+
+		r.Get("/courses/{course_id}/modules", timetableProvider.GetCourseModules).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Post("/courses/{course_id}/modules/{module_id}", timetableProvider.AssignModuleToCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Delete("/courses/{course_id}/modules/{module_id}", timetableProvider.UnassignModuleFromCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+
+		r.Get("/courses/{course_id}/students", timetableProvider.GetCourseStudents).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Post("/courses/{course_id}/students/{user_id}", timetableProvider.AssignStudentToCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Delete("/courses/{course_id}/students/{user_id}", timetableProvider.UnassignStudentFromCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
+
+		r.Get("/modules", timetableProvider.GetModules).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Get("/modules/{module_id}", timetableProvider.GetModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Post("/modules", timetableProvider.CreateModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Patch("/modules/{module_id}", timetableProvider.UpdateModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Delete("/modules/{module_id}", timetableProvider.DeleteModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
+
+		r.Get("/modules/{module_id}/classes", timetableProvider.GetClasses).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Get("/modules/{module_id}/classes/{class_id}", timetableProvider.GetClass).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Post("/modules/{module_id}/classes", timetableProvider.CreateClass).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Patch("/modules/{module_id}/classes/{class_id}", timetableProvider.UpdateClass).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Delete("/modules/{module_id}/classes/{class_id}", timetableProvider.DeleteClass).Use(middleware.RequireAuth(authService, "admin", "staff"))
+	})
+
+	r.Group("/v1/users", func() {
+		r.Get("", userProvider.GetUsers).Use(middleware.RequireAuth(authService, "admin", "staff"))
 	})
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

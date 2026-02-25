@@ -2,8 +2,24 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"reflect"
+
+	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
+	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
+
+func emptySliceIfNil(v any) any {
+	if v == nil {
+		return []any{}
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		return reflect.MakeSlice(reflect.SliceOf(rv.Type().Elem()), 0, 0).Interface()
+	}
+	return v
+}
 
 type HttpErrorMessage struct {
 	StatusCode int    `json:"-"`
@@ -23,9 +39,9 @@ type ApiResponse struct {
 
 type PaginationMeta struct {
 	Page       int `json:"page"`
-	PerPage    int `json:"per_page"`
+	PerPage    int `json:"perPage"`
 	Total      int `json:"total"`
-	TotalPages int `json:"total_pages"`
+	TotalPages int `json:"totalPages"`
 }
 
 func JsonResponse(w http.ResponseWriter, statusCode int, data any) {
@@ -37,40 +53,50 @@ func JsonResponse(w http.ResponseWriter, statusCode int, data any) {
 }
 
 func JsonError(w http.ResponseWriter, err any) {
-	var errorMsg HttpErrorMessage
-
+	var msg HttpErrorMessage
 	switch e := err.(type) {
 	case HttpErrorMessage:
-		errorMsg = e
+		msg = e
 	case *HttpErrorMessage:
-		errorMsg = *e
+		msg = *e
 	case error:
-		errorMsg = HttpErrorMessage{
-			StatusCode: http.StatusInternalServerError,
-			Success:    false,
-			Error:      e.Error(),
+		var vErr validation.ValidationError
+		if errors.As(e, &vErr) {
+			msg = HttpErrorMessage{
+				StatusCode: vErr.StatusCode(),
+				Success:    false,
+				Error:      "There are one or more validation errors",
+				Details:    vErr.Details(),
+			}
+		} else {
+			msg = HttpErrorMessage{
+				StatusCode: http.StatusInternalServerError,
+				Success:    false,
+				Error:      e.Error(),
+			}
+			var hErr errs.HTTPError
+			if errors.As(e, &hErr) {
+				msg.StatusCode = hErr.Code
+			}
 		}
 	case string:
-		errorMsg = HttpErrorMessage{
+		msg = HttpErrorMessage{
 			StatusCode: http.StatusInternalServerError,
 			Success:    false,
 			Error:      e,
 		}
 	default:
-		errorMsg = HttpErrorMessage{
+		msg = HttpErrorMessage{
 			StatusCode: http.StatusInternalServerError,
 			Success:    false,
 			Error:      "An unexpected error occurred",
 		}
 	}
-
-	if errorMsg.StatusCode == 0 {
-		errorMsg.StatusCode = http.StatusInternalServerError
+	if msg.StatusCode == 0 {
+		msg.StatusCode = http.StatusInternalServerError
 	}
-
-	errorMsg.Success = false
-
-	JsonResponse(w, errorMsg.StatusCode, errorMsg)
+	msg.Success = false
+	JsonResponse(w, msg.StatusCode, msg)
 }
 
 func JsonSuccess(w http.ResponseWriter, statusCode int, message string, data any) {
@@ -81,7 +107,7 @@ func JsonSuccess(w http.ResponseWriter, statusCode int, message string, data any
 	resp := ApiResponse{
 		Success: true,
 		Message: message,
-		Data:    data,
+		Data:    emptySliceIfNil(data),
 	}
 
 	JsonResponse(w, statusCode, resp)
@@ -95,7 +121,7 @@ func JsonSuccessWithMeta(w http.ResponseWriter, statusCode int, message string, 
 	resp := ApiResponse{
 		Success: true,
 		Message: message,
-		Data:    data,
+		Data:    emptySliceIfNil(data),
 		Meta:    meta,
 	}
 
