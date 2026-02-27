@@ -13,11 +13,13 @@ import (
 	userhandlers "github.com/adsum-project/attendance-backend/internal/handlers/user"
 	verificationhandlers "github.com/adsum-project/attendance-backend/internal/handlers/verification"
 	"github.com/adsum-project/attendance-backend/internal/middleware"
+	verificationrepo "github.com/adsum-project/attendance-backend/internal/repositories/verification"
 	authrepo "github.com/adsum-project/attendance-backend/internal/repositories/auth"
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/internal/services/auth"
 	"github.com/adsum-project/attendance-backend/internal/services/graph"
 	"github.com/adsum-project/attendance-backend/internal/services/timetable"
+	"github.com/adsum-project/attendance-backend/internal/services/verification"
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -75,11 +77,6 @@ func main() {
 		log.Fatal("Error initializing auth provider: ", err)
 	}
 
-	verificationProvider, err := verificationhandlers.NewVerificationProvider()
-	if err != nil {
-		log.Fatal("Error initializing verification provider: ", err)
-	}
-
 	graphService, err := graph.NewGraphService()
 	if err != nil {
 		log.Fatal("Error initializing Graph service: ", err)
@@ -93,6 +90,16 @@ func main() {
 	timetableProvider, err := timetablehandlers.NewTimetableProvider(timetableService)
 	if err != nil {
 		log.Fatal("Error initializing timetable provider: ", err)
+	}
+
+	verificationRepo := verificationrepo.NewVerificationRepository(dbProvider.DB)
+	verificationService, err := verification.NewVerificationService(verificationRepo, timetableService)
+	if err != nil {
+		log.Fatal("Error initializing verification service: ", err)
+	}
+	verificationProvider, err := verificationhandlers.NewVerificationProvider(verificationService)
+	if err != nil {
+		log.Fatal("Error initializing verification provider: ", err)
 	}
 	userProvider, err := userhandlers.NewUserProvider(graphService)
 	if err != nil {
@@ -114,10 +121,17 @@ func main() {
 		r.Put("/embeddings", verificationProvider.UpdateEmbedding).Use(middleware.RequireAuth(authService))
 		r.Delete("/embeddings", verificationProvider.DeleteEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
+
+		r.Get("/qr/verify", verificationProvider.QRVerify).Use(middleware.RequireAuth(authService))
+		r.Get("/qr", verificationProvider.QRStream).Use(middleware.RequireAuth(authService, "admin"))
 	})
 
 	r.Group("/v1/timetable", func() {
 		r.Get("/me", timetableProvider.GetOwnTimetable).Use(middleware.RequireAuth(authService, "default"))
+		r.Get("/node", timetableProvider.GetNodeTimetable).Use(middleware.RequireAuth(authService, "admin"))
+		r.Get("/node/room", timetableProvider.GetNodeRoom).Use(middleware.RequireAuth(authService, "admin"))
+		r.Put("/node/room", timetableProvider.UpdateNodeRoom).Use(middleware.RequireAuth(authService, "admin"))
+		r.Delete("/node/room", timetableProvider.DeleteNodeRoom).Use(middleware.RequireAuth(authService, "admin"))
 
 		r.Get("/courses", timetableProvider.GetCourses).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Get("/courses/me", timetableProvider.GetOwnCourses).Use(middleware.RequireAuth(authService, "default"))

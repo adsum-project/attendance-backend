@@ -58,3 +58,9 @@ func (r *responseWriterWrapper) Write(b []byte) (int, error) {
 	r.bytes += n
 	return n, err
 }
+
+func (r *responseWriterWrapper) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}

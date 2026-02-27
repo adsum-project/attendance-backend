@@ -47,3 +47,7 @@ type UpdateClassRequest struct {
 	EndsAt     *string `json:"endsAt"`
 	Recurrence *string `json:"recurrence"`
 }
+
+type NodeRoomAssignRequest struct {
+	Room string `json:"room"`
+}
