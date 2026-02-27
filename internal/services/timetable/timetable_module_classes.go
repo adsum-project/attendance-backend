@@ -40,7 +40,7 @@ func (t *TimetableService) GetClass(ctx context.Context, moduleID, classID strin
 	return class, nil
 }
 
-func (t *TimetableService) CreateClass(ctx context.Context, moduleID, className, room, startsAt, endsAt, recurrence string, untilDate *string) (string, error) {
+func (t *TimetableService) CreateClass(ctx context.Context, moduleID, className, room string, dayOfWeek int, startsAt, endsAt, recurrence string) (string, error) {
 	module, err := t.repo.GetModuleByID(ctx, moduleID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrModuleNotFound) {
@@ -57,24 +57,30 @@ func (t *TimetableService) CreateClass(ctx context.Context, moduleID, className,
 	v.Add(validation.LengthRange(className, "className", 1, 100))
 	v.Add(validation.Required(room, "room"))
 	v.Add(validation.LengthRange(room, "room", 1, 100))
+	v.Add(validation.IntRange(dayOfWeek, "dayOfWeek", 1, 7))
 	v.Add(validation.Required(startsAt, "startsAt"))
-	v.Add(validation.DateTimeFormat(startsAt, "startsAt"))
+	v.Add(validation.TimeFormat(startsAt, "startsAt"))
 	v.Add(validation.Required(endsAt, "endsAt"))
-	v.Add(validation.DateTimeFormat(endsAt, "endsAt"))
-	v.Add(validation.DateTimeRange(startsAt, endsAt, "endsAt"))
+	v.Add(validation.TimeFormat(endsAt, "endsAt"))
+	v.Add(validation.TimeRange(startsAt, endsAt, "endsAt"))
 	v.Add(validation.Required(recurrence, "recurrence"))
 	v.Add(validation.Recurrence(recurrence, "recurrence"))
-	if untilDate != nil && *untilDate != "" {
-		v.Add(validation.DateFormat(*untilDate, "untilDate"))
-	}
 	if err := v.Result(); err != nil {
 		return "", err
 	}
 
-	return t.repo.CreateClass(ctx, moduleID, className, room, startsAt, endsAt, recurrence, untilDate)
+	conflict, err := t.repo.HasRoomConflict(ctx, room, dayOfWeek, startsAt, endsAt, "")
+	if err != nil {
+		return "", err
+	}
+	if conflict {
+		return "", errs.Conflict("room is already booked at this time")
+	}
+
+	return t.repo.CreateClass(ctx, moduleID, className, room, dayOfWeek, startsAt, endsAt, recurrence)
 }
 
-func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID string, className, room, startsAt, endsAt, recurrence, untilDate *string) error {
+func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID string, className, room *string, dayOfWeek *int, startsAt, endsAt, recurrence *string) error {
 	module, err := t.repo.GetModuleByID(ctx, moduleID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrModuleNotFound) {
@@ -94,7 +100,7 @@ func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID st
 		return err
 	}
 
-	if className == nil && room == nil && startsAt == nil && endsAt == nil && recurrence == nil && untilDate == nil {
+	if className == nil && room == nil && dayOfWeek == nil && startsAt == nil && endsAt == nil && recurrence == nil {
 		return errs.BadRequest("at least one field must be provided")
 	}
 
@@ -107,31 +113,47 @@ func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID st
 		v.Add(validation.Required(*room, "room"))
 		v.Add(validation.LengthRange(*room, "room", 1, 100))
 	}
+	if dayOfWeek != nil {
+		v.Add(validation.IntRange(*dayOfWeek, "dayOfWeek", 1, 7))
+	}
 	if startsAt != nil {
 		v.Add(validation.Required(*startsAt, "startsAt"))
-		v.Add(validation.DateTimeFormat(*startsAt, "startsAt"))
+		v.Add(validation.TimeFormat(*startsAt, "startsAt"))
 	}
 	if endsAt != nil {
 		v.Add(validation.Required(*endsAt, "endsAt"))
-		v.Add(validation.DateTimeFormat(*endsAt, "endsAt"))
+		v.Add(validation.TimeFormat(*endsAt, "endsAt"))
 	}
 	if startsAt != nil || endsAt != nil {
 		startVal := validation.OptionalString(startsAt, class.StartsAt)
 		endVal := validation.OptionalString(endsAt, class.EndsAt)
-		v.Add(validation.DateTimeRange(startVal, endVal, "endsAt"))
+		v.Add(validation.TimeRange(startVal, endVal, "endsAt"))
 	}
 	if recurrence != nil {
 		v.Add(validation.Required(*recurrence, "recurrence"))
 		v.Add(validation.Recurrence(*recurrence, "recurrence"))
 	}
-	if untilDate != nil && *untilDate != "" {
-		v.Add(validation.DateFormat(*untilDate, "untilDate"))
-	}
 	if err := v.Result(); err != nil {
 		return err
 	}
 
-	return t.repo.UpdateClass(ctx, moduleID, classID, className, room, startsAt, endsAt, recurrence, untilDate)
+	effectiveRoom := validation.OptionalString(room, class.Room)
+	effectiveDayOfWeek := class.DayOfWeek
+	if dayOfWeek != nil {
+		effectiveDayOfWeek = *dayOfWeek
+	}
+	effectiveStartsAt := validation.OptionalString(startsAt, class.StartsAt)
+	effectiveEndsAt := validation.OptionalString(endsAt, class.EndsAt)
+
+	conflict, err := t.repo.HasRoomConflict(ctx, effectiveRoom, effectiveDayOfWeek, effectiveStartsAt, effectiveEndsAt, classID)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		return errs.Conflict("room is already booked at this time")
+	}
+
+	return t.repo.UpdateClass(ctx, moduleID, classID, className, room, dayOfWeek, startsAt, endsAt, recurrence)
 }
 
 func (t *TimetableService) DeleteClass(ctx context.Context, moduleID, classID string) error {

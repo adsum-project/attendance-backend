@@ -40,7 +40,7 @@ func (p *TimetableProvider) CreateClass(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	classID, err := p.timetable.CreateClass(r.Context(), moduleID, req.ClassName, req.Room, req.StartsAt, req.EndsAt, req.Recurrence, req.UntilDate)
+	classID, err := p.timetable.CreateClass(r.Context(), moduleID, req.ClassName, req.Room, req.DayOfWeek, req.StartsAt, req.EndsAt, req.Recurrence)
 	if err != nil {
 		response.JsonError(w, err)
 		return
@@ -58,7 +58,7 @@ func (p *TimetableProvider) UpdateClass(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := p.timetable.UpdateClass(r.Context(), moduleID, classID, req.ClassName, req.Room, req.StartsAt, req.EndsAt, req.Recurrence, req.UntilDate); err != nil {
+	if err := p.timetable.UpdateClass(r.Context(), moduleID, classID, req.ClassName, req.Room, req.DayOfWeek, req.StartsAt, req.EndsAt, req.Recurrence); err != nil {
 		response.JsonError(w, err)
 		return
 	}

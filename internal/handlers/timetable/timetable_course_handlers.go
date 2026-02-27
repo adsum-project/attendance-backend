@@ -9,6 +9,15 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
+func (p *TimetableProvider) GetOwnCourses(w http.ResponseWriter, r *http.Request) {
+	courses, err := p.timetable.GetOwnCourses(r.Context())
+	if err != nil {
+		response.JsonError(w, err)
+		return
+	}
+	response.OK(w, "", courses)
+}
+
 func (p *TimetableProvider) GetCourses(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))

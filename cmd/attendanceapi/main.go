@@ -117,7 +117,10 @@ func main() {
 	})
 
 	r.Group("/v1/timetable", func() {
+		r.Get("/me", timetableProvider.GetOwnTimetable).Use(middleware.RequireAuth(authService, "default"))
+
 		r.Get("/courses", timetableProvider.GetCourses).Use(middleware.RequireAuth(authService, "admin", "staff"))
+		r.Get("/courses/me", timetableProvider.GetOwnCourses).Use(middleware.RequireAuth(authService, "default"))
 		r.Get("/courses/{course_id}", timetableProvider.GetCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Post("/courses", timetableProvider.CreateCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Patch("/courses/{course_id}", timetableProvider.UpdateCourse).Use(middleware.RequireAuth(authService, "admin", "staff"))

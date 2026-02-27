@@ -37,21 +37,30 @@ func UpdateAndCast(updates map[string]any, castColumns map[string]string) (claus
 		if v == nil {
 			continue
 		}
-		s, ok := v.(*string)
-		if !ok || s == nil {
-			continue
-		}
 		castType := castColumns[col]
-		if castType != "" {
-			sets = append(sets, col+" = CAST(@p"+fmt.Sprint(p)+" AS "+castType+")")
-		} else {
+		switch val := v.(type) {
+		case *string:
+			if val == nil {
+				continue
+			}
+			if castType != "" {
+				sets = append(sets, col+" = CAST(@p"+fmt.Sprint(p)+" AS "+castType+")")
+			} else {
+				sets = append(sets, col+" = @p"+fmt.Sprint(p))
+			}
+			args = append(args, *val)
+			p++
+		case *int:
+			if val == nil {
+				continue
+			}
 			sets = append(sets, col+" = @p"+fmt.Sprint(p))
+			args = append(args, *val)
+			p++
 		}
-		args = append(args, *s)
-		p++
 	}
 	if len(sets) == 0 {
 		return "", nil, "@p1"
 	}
-	return strings.Join(sets, ", "), args, "@p" + fmt.Sprint(p)
+	return strings.Join(sets, ", "), args, "@p"+fmt.Sprint(p)
 }

@@ -54,6 +54,14 @@ func (t *TimetableService) GetCourses(ctx context.Context, page, perPage int) ([
 	return pagination.Paginate(ctx, page, perPage, t.repo.GetCourses, t.repo.GetCoursesCount)
 }
 
+func (t *TimetableService) GetOwnCourses(ctx context.Context) ([]timetablemodels.Course, error) {
+	userID, _ := ctx.Value("userID").(string)
+	if userID == "" {
+		return nil, nil
+	}
+	return t.repo.GetCoursesByUserId(ctx, userID)
+}
+
 func (t *TimetableService) UpdateCourse(ctx context.Context, courseID string, courseCode, courseName, campus *string) error {
 	course, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {

@@ -162,6 +162,15 @@ func DateTimeFormat(s, fieldName string) error {
 	return nil
 }
 
+var timePattern = regexp.MustCompile(`^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$`)
+
+func TimeFormat(s, fieldName string) error {
+	if !timePattern.MatchString(s) {
+		return errors.New(fieldName + " must be a valid time (HH:MM or HH:MM:SS)")
+	}
+	return nil
+}
+
 func DateRange(startDate, endDate, fieldName string) error {
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
@@ -190,7 +199,6 @@ func Recurrence(s, fieldName string) error {
 	return OneOf(s, fieldName, []string{"daily", "weekly", "biweekly", "monthly"})
 }
 
-
 func parseDateTime(s string) (time.Time, error) {
 	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05"} {
 		if t, err := time.Parse(layout, s); err == nil {
@@ -208,6 +216,27 @@ func DateTimeRange(startsAt, endsAt, fieldName string) error {
 	end, err := parseDateTime(endsAt)
 	if err != nil {
 		return nil
+	}
+	if !end.After(start) {
+		return errors.New(fieldName + " must be after startsAt")
+	}
+	return nil
+}
+
+func TimeRange(startsAt, endsAt, fieldName string) error {
+	start, err := time.Parse("15:04:05", startsAt)
+	if err != nil {
+		start, err = time.Parse("15:04", startsAt)
+		if err != nil {
+			return nil
+		}
+	}
+	end, err := time.Parse("15:04:05", endsAt)
+	if err != nil {
+		end, err = time.Parse("15:04", endsAt)
+		if err != nil {
+			return nil
+		}
 	}
 	if !end.After(start) {
 		return errors.New(fieldName + " must be after startsAt")

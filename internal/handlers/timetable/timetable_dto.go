@@ -33,17 +33,17 @@ type AssignModuleToCourseRequest struct {
 type CreateClassRequest struct {
 	ClassName  string  `json:"className"`
 	Room       string  `json:"room"`
+	DayOfWeek  int     `json:"dayOfWeek"`
 	StartsAt   string  `json:"startsAt"`
 	EndsAt     string  `json:"endsAt"`
 	Recurrence string  `json:"recurrence"`
-	UntilDate  *string `json:"untilDate"`
 }
 
 type UpdateClassRequest struct {
 	ClassName  *string `json:"className"`
 	Room       *string `json:"room"`
+	DayOfWeek  *int    `json:"dayOfWeek"`
 	StartsAt   *string `json:"startsAt"`
 	EndsAt     *string `json:"endsAt"`
 	Recurrence *string `json:"recurrence"`
-	UntilDate  *string `json:"untilDate"`
 }

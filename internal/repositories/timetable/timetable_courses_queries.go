@@ -52,6 +52,24 @@ func (r *TimetableRepository) GetCourseByID(ctx context.Context, courseID string
 	return &course, nil
 }
 
+func (r *TimetableRepository) GetCoursesByUserId(ctx context.Context, userID string) ([]timetablemodels.Course, error) {
+	var courses []timetablemodels.Course
+	err := r.db.SelectContext(
+		ctx,
+		&courses,
+		`SELECT `+query.Guid("c.course_id")+` as course_id, c.course_code, c.course_name, c.campus, `+query.Guid("c.owner_id")+` as owner_id, c.created_at, c.updated_at
+		FROM `+courseStudentsTable+` cs
+		INNER JOIN `+coursesTable+` c ON cs.course_id = c.course_id
+		WHERE `+query.Guid("cs.user_id")+` = LOWER(@p1)
+		ORDER BY c.course_code`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get courses for user: %w", err)
+	}
+	return courses, nil
+}
+
 func (r *TimetableRepository) GetCoursesCount(ctx context.Context) (int, error) {
 	var total int
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+coursesTable).Scan(&total)
