@@ -200,12 +200,12 @@ func (p *VerificationProvider) QRVerify(w http.ResponseWriter, r *http.Request) 
 			status = "error"
 			message = "Sign-in failed"
 		}
-		redirectURL := fmt.Sprintf("%s/attendance/sign-in?status=%s&message=%s",
+		redirectURL := fmt.Sprintf("%s/attendance/qr-landing-page?status=%s&message=%s",
 			frontendURL, url.QueryEscape(status), url.QueryEscape(message))
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
 
-	redirectURL := fmt.Sprintf("%s/attendance/sign-in?status=success", frontendURL)
+	redirectURL := fmt.Sprintf("%s/attendance/qr-landing-page?status=success", frontendURL)
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
