@@ -53,6 +53,9 @@ func getRolesFromClaims(claims map[string]any) []string {
 	if raw == nil {
 		return nil
 	}
+	if strSlice, ok := raw.([]string); ok {
+		return strSlice
+	}
 	slice, ok := raw.([]interface{})
 	if !ok {
 		return nil

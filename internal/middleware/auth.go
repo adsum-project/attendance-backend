@@ -46,8 +46,13 @@ func RequireAuthWithRedirect(a *auth.AuthService, redirectURL string, roles ...s
 				return
 			}
 
+			claims := session.Claims
+			if _, ok := claims["roles"].([]interface{}); !ok {
+				claims["roles"] = []interface{}{"default"}
+			}
+
 			ctx := context.WithValue(r.Context(), "sessionID", session.ID)
-			ctx = context.WithValue(ctx, "claims", session.Claims)
+			ctx = context.WithValue(ctx, "claims", claims)
 			ctx = context.WithValue(ctx, "userID", session.UserID)
 
 			if len(roles) > 0 {
