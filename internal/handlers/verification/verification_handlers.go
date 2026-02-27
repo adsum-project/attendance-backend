@@ -62,6 +62,10 @@ func (p *VerificationProvider) VerifyEmbedding(w http.ResponseWriter, r *http.Re
 			response.Forbidden(w, "This class is not currently running")
 			return
 		}
+		if errors.Is(err, verificationrepo.ErrAlreadySignedIn) {
+			response.Forbidden(w, "You have already signed in to this class")
+			return
+		}
 		response.InternalServerError(w, "Failed to verify")
 		return
 	}
@@ -196,6 +200,9 @@ func (p *VerificationProvider) QRVerify(w http.ResponseWriter, r *http.Request) 
 		case errors.Is(err, timetable.ErrClassNotRunning):
 			status = "error"
 			message = "This class is not currently running"
+		case errors.Is(err, verificationrepo.ErrAlreadySignedIn):
+			status = "error"
+			message = "You have already signed in to this class"
 		default:
 			status = "error"
 			message = "Sign-in failed"

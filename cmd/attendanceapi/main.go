@@ -97,6 +97,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Error initializing verification service: ", err)
 	}
+
+	go verificationService.RunQRTokenCleanup(1 * time.Minute)
 	verificationProvider, err := verificationhandlers.NewVerificationProvider(verificationService)
 	if err != nil {
 		log.Fatal("Error initializing verification provider: ", err)

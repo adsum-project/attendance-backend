@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -83,7 +84,13 @@ func (s *VerificationService) VerifyEmbedding(ctx context.Context, imageBase64, 
 	if err := s.timetableService.CanStudentSignIntoClass(ctx, upstream.Data.UserID, classID); err != nil {
 		return nil, err
 	}
-
+	already, err := s.verificationRepo.HasSignedIn(ctx, upstream.Data.UserID, classID)
+	if err != nil {
+		return nil, err
+	}
+	if already {
+		return nil, verificationrepo.ErrAlreadySignedIn
+	}
 	if err := s.verificationRepo.InsertRecord(ctx, upstream.Data.UserID, classID, methodFR); err != nil {
 		return nil, fmt.Errorf("insert attendance record: %w", err)
 	}
@@ -92,7 +99,7 @@ func (s *VerificationService) VerifyEmbedding(ctx context.Context, imageBase64, 
 }
 
 func (s *VerificationService) IssueQRToken(ctx context.Context, classID string) (string, error) {
-	expiresAt := time.Now().UTC().Add(2 * time.Minute)
+	expiresAt := time.Now().UTC().Add(30 * time.Second)
 	token, err := s.verificationRepo.CreateSignInToken(ctx, classID, expiresAt)
 	if err != nil {
 		return "", err
@@ -109,6 +116,13 @@ func (s *VerificationService) SignInWithQRToken(ctx context.Context, userID, tok
 	if err := s.timetableService.CanStudentSignIntoClass(ctx, userID, classID); err != nil {
 		return err
 	}
+	already, err := s.verificationRepo.HasSignedIn(ctx, userID, classID)
+	if err != nil {
+		return err
+	}
+	if already {
+		return verificationrepo.ErrAlreadySignedIn
+	}
 	if err := s.verificationRepo.InsertRecord(ctx, userID, classID, methodQR); err != nil {
 		return fmt.Errorf("insert attendance record: %w", err)
 	}
@@ -124,4 +138,24 @@ func (s *VerificationService) QRTokenStream(classID string) (chan string, func()
 
 func (s *VerificationService) IsQRTokenValid(ctx context.Context, token string) (bool, error) {
 	return s.verificationRepo.IsTokenValid(ctx, token)
+}
+
+func (s *VerificationService) CleanupExpiredQRTokens(ctx context.Context) (int64, error) {
+	return s.verificationRepo.DeleteExpiredQRTokens(ctx)
+}
+
+func (s *VerificationService) RunQRTokenCleanup(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		ctx := context.Background()
+		n, err := s.CleanupExpiredQRTokens(ctx)
+		if err != nil {
+			log.Printf("QR token cleanup: %v", err)
+			continue
+		}
+		if n > 0 {
+			log.Printf("QR token cleanup: removed %d expired tokens", n)
+		}
+	}
 }
