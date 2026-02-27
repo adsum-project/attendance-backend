@@ -13,9 +13,9 @@ import (
 	userhandlers "github.com/adsum-project/attendance-backend/internal/handlers/user"
 	verificationhandlers "github.com/adsum-project/attendance-backend/internal/handlers/verification"
 	"github.com/adsum-project/attendance-backend/internal/middleware"
-	verificationrepo "github.com/adsum-project/attendance-backend/internal/repositories/verification"
 	authrepo "github.com/adsum-project/attendance-backend/internal/repositories/auth"
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
+	verificationrepo "github.com/adsum-project/attendance-backend/internal/repositories/verification"
 	"github.com/adsum-project/attendance-backend/internal/services/auth"
 	"github.com/adsum-project/attendance-backend/internal/services/graph"
 	"github.com/adsum-project/attendance-backend/internal/services/timetable"
@@ -122,7 +122,7 @@ func main() {
 		r.Delete("/embeddings", verificationProvider.DeleteEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
 
-		r.Get("/qr/verify", verificationProvider.QRVerify).Use(middleware.RequireAuth(authService))
+		r.Get("/qr/verify", verificationProvider.QRVerify).Use(middleware.RequireAuthWithRedirect(authService, os.Getenv("FRONTEND_URL")+"/", "default"))
 		r.Get("/qr", verificationProvider.QRStream).Use(middleware.RequireAuth(authService, "admin"))
 	})
 

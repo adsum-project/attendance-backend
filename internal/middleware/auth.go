@@ -10,12 +10,24 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
-func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
+func RequireAuthWithRedirect(a *auth.AuthService, redirectURL string, roles ...string) router.Middleware {
 	return func(handler router.Handler) router.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {
+			fail := func(status int, msg string) {
+				if redirectURL != "" {
+					http.Redirect(w, r, redirectURL, http.StatusFound)
+					return
+				}
+				if status == http.StatusForbidden {
+					response.Forbidden(w, msg)
+					return
+				}
+				response.Unauthorized(w, msg)
+			}
+
 			sessionID, err := a.GetSessionCookie(r)
 			if err != nil {
-				response.Unauthorized(w, "Not authenticated")
+				fail(http.StatusUnauthorized, "Not authenticated")
 				return
 			}
 
@@ -23,14 +35,14 @@ func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
 			if err != nil {
 				a.ClearSessionCookie(w)
 				a.ClearOAuthCookies(w)
-				response.Unauthorized(w, "Invalid session")
+				fail(http.StatusUnauthorized, "Invalid session")
 				return
 			}
 
 			if session.UserID == "" {
 				a.ClearSessionCookie(w)
 				a.ClearOAuthCookies(w)
-				response.Unauthorized(w, "Invalid session: missing user ID")
+				fail(http.StatusUnauthorized, "Invalid session: missing user ID")
 				return
 			}
 
@@ -40,7 +52,7 @@ func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
 
 			if len(roles) > 0 {
 				if hasRoles := authorization.HasRoles(ctx, roles...); !hasRoles {
-					response.Forbidden(w, "Forbidden")
+					fail(http.StatusForbidden, "Forbidden")
 					return
 				}
 			}
@@ -48,6 +60,10 @@ func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
 			handler(w, r.WithContext(ctx))
 		}
 	}
+}
+
+func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
+	return RequireAuthWithRedirect(a, "", roles...)
 }
 
 func RequireNoAuth(a *auth.AuthService) router.Middleware {
