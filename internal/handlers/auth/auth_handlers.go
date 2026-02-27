@@ -117,6 +117,9 @@ func (p *AuthProvider) Me(w http.ResponseWriter, r *http.Request) {
 		user["id"] = oid
 	}
 	if roles, ok := claims["roles"]; ok {
+		if roles == nil || len(roles.([]string)) == 0 {
+			roles = []string{"default"}
+		}
 		user["roles"] = roles
 	}
 
