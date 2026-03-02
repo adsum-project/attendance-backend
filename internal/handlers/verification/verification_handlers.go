@@ -1,6 +1,7 @@
 package verificationhandlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,10 @@ import (
 	verificationrepo "github.com/adsum-project/attendance-backend/internal/repositories/verification"
 	"github.com/adsum-project/attendance-backend/internal/services/timetable"
 	"github.com/adsum-project/attendance-backend/internal/services/verification"
+	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils"
+	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
+	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
@@ -33,6 +37,91 @@ func (p *VerificationProvider) DeleteEmbedding(w http.ResponseWriter, r *http.Re
 	p.handleEmbeddingRequest(w, r)
 }
 
+func (p *VerificationProvider) GetRecords(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("userID").(string)
+	if userID == "" {
+		response.Unauthorized(w, "Sign in required")
+		return
+	}
+
+	classID := strings.TrimSpace(r.URL.Query().Get("classId"))
+	targetUserID := strings.TrimSpace(r.URL.Query().Get("userId"))
+
+	hasClassID := classID != ""
+	hasUserID := targetUserID != ""
+	isStaffOrAdmin := authorization.HasRoles(r.Context(), "admin", "staff")
+
+	if isStaffOrAdmin {
+		if hasClassID && hasUserID {
+			response.JsonError(w, errs.BadRequest("Provide either userId or classId, not both"))
+			return
+		}
+		if hasClassID {
+			records, err := p.verificationService.GetRecordsByClass(r.Context(), classID)
+			if err != nil {
+				response.InternalServerError(w, "Failed to fetch attendance records")
+				return
+			}
+			response.OK(w, "", records)
+			return
+		}
+		if hasUserID {
+			records, err := p.verificationService.GetOwnRecords(r.Context(), targetUserID)
+			if err != nil {
+				response.InternalServerError(w, "Failed to fetch attendance records")
+				return
+			}
+			response.OK(w, "", records)
+			return
+		}
+		response.JsonError(w, errs.BadRequest("Provide userId or classId to view attendance records"))
+		return
+	}
+
+	// Students: own records only, no params
+
+	records, err := p.verificationService.GetOwnRecords(r.Context(), userID)
+	if err != nil {
+		response.InternalServerError(w, "Failed to fetch attendance records")
+		return
+	}
+	response.OK(w, "", records)
+}
+
+func (p *VerificationProvider) PatchRecordStatus(w http.ResponseWriter, r *http.Request) {
+	if !authorization.HasRoles(r.Context(), "admin", "staff") {
+		response.Forbidden(w, "Only staff and admins can update record status")
+		return
+	}
+	recordID := strings.TrimSpace(router.PathParam(r, "record_id"))
+	if recordID == "" {
+		response.BadRequest(w, "record_id is required", nil)
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "Invalid request body", nil)
+		return
+	}
+	status := strings.TrimSpace(strings.ToLower(req.Status))
+	if status != "absent" && status != "excused" {
+		response.JsonError(w, errs.BadRequest("status must be 'absent' or 'excused'"))
+		return
+	}
+	err := p.verificationService.UpdateRecordStatus(r.Context(), recordID, status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(w, "Record not found or cannot be updated")
+			return
+		}
+		response.InternalServerError(w, "Failed to update record status")
+		return
+	}
+	response.OK(w, "Updated", nil)
+}
+
 func (p *VerificationProvider) VerifyEmbedding(w http.ResponseWriter, r *http.Request) {
 	var req VerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -50,6 +139,10 @@ func (p *VerificationProvider) VerifyEmbedding(w http.ResponseWriter, r *http.Re
 
 	result, err := p.verificationService.VerifyEmbedding(r.Context(), req.ImageBase64, req.ClassID)
 	if err != nil {
+		if errors.Is(err, verification.ErrNoFaceDetected) {
+			response.BadRequest(w, "No face detected", nil)
+			return
+		}
 		if errors.Is(err, verification.ErrNoMatch) {
 			response.NotFound(w, "No match")
 			return

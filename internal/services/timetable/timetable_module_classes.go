@@ -3,6 +3,7 @@ package timetable
 import (
 	"context"
 	"errors"
+	"strings"
 
 	timetablemodels "github.com/adsum-project/attendance-backend/internal/models/timetable"
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
@@ -51,6 +52,8 @@ func (t *TimetableService) CreateClass(ctx context.Context, moduleID, className,
 	if !authorization.IsOwnerOrAdmin(ctx, module.OwnerID) {
 		return "", errs.Forbidden("")
 	}
+
+	room = strings.ToUpper(strings.TrimSpace(room))
 
 	var v validation.Errors
 	v.Add(validation.Required(className, "className"))
@@ -102,6 +105,10 @@ func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID st
 
 	if className == nil && room == nil && dayOfWeek == nil && startsAt == nil && endsAt == nil && recurrence == nil {
 		return errs.BadRequest("at least one field must be provided")
+	}
+
+	if room != nil {
+		*room = strings.ToUpper(strings.TrimSpace(*room))
 	}
 
 	var v validation.Errors

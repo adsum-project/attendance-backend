@@ -19,7 +19,7 @@ func (r *TimetableRepository) GetClasses(ctx context.Context, moduleID string) (
 	err := r.db.SelectContext(
 		ctx,
 		&classes,
-		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, room,
+		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, UPPER(LTRIM(RTRIM(room))) as room,
 		day_of_week, CONVERT(VARCHAR(8), starts_at, 108) as starts_at, CONVERT(VARCHAR(8), ends_at, 108) as ends_at,
 		recurrence,
 		CONVERT(VARCHAR(33), created_at, 127) as created_at, CONVERT(VARCHAR(33), updated_at, 127) as updated_at
@@ -39,7 +39,7 @@ func (r *TimetableRepository) GetClassByID(ctx context.Context, moduleID, classI
 	err := r.db.GetContext(
 		ctx,
 		&class,
-		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, room,
+		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, UPPER(LTRIM(RTRIM(room))) as room,
 		day_of_week, CONVERT(VARCHAR(8), starts_at, 108) as starts_at, CONVERT(VARCHAR(8), ends_at, 108) as ends_at,
 		recurrence,
 		CONVERT(VARCHAR(33), created_at, 127) as created_at, CONVERT(VARCHAR(33), updated_at, 127) as updated_at

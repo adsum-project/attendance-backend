@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	verificationmodels "github.com/adsum-project/attendance-backend/internal/models/verification"
 	verificationrepo "github.com/adsum-project/attendance-backend/internal/repositories/verification"
 	"github.com/adsum-project/attendance-backend/internal/services/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/broadcaster"
@@ -26,12 +27,15 @@ const (
 
 var ErrNoMatch = errors.New("no match")
 
+// ErrNoFaceDetected is returned when the FR backend returns 400 (e.g. no face, low confidence, multiple faces).
+var ErrNoFaceDetected = errors.New("no face detected")
+
 type VerificationService struct {
 	client           *http.Client
 	embeddingsURL    string
 	verificationRepo *verificationrepo.VerificationRepository
 	timetableService *timetable.TimetableService
-	qrBroadcaster *broadcaster.Broadcaster
+	qrBroadcaster    *broadcaster.Broadcaster
 }
 
 func NewVerificationService(verificationRepo *verificationrepo.VerificationRepository, timetableService *timetable.TimetableService) (*VerificationService, error) {
@@ -43,7 +47,7 @@ func NewVerificationService(verificationRepo *verificationrepo.VerificationRepos
 		return nil, fmt.Errorf("timetable service is required")
 	}
 	return &VerificationService{
-		client:           &http.Client{Timeout: 15 * time.Second},
+		client:           &http.Client{Timeout: 60 * time.Second},
 		embeddingsURL:    embeddingsURL,
 		verificationRepo: verificationRepo,
 		timetableService: timetableService,
@@ -72,6 +76,10 @@ func (s *VerificationService) VerifyEmbedding(ctx context.Context, imageBase64, 
 		return nil, fmt.Errorf("upstream request: %w", err)
 	}
 
+	if res.StatusCode == http.StatusBadRequest {
+		return nil, ErrNoFaceDetected
+	}
+
 	var upstream EmbeddingVerifyResponse
 	if err := json.Unmarshal(res.Body, &upstream); err != nil {
 		return nil, fmt.Errorf("invalid upstream response: %w", err)
@@ -84,7 +92,8 @@ func (s *VerificationService) VerifyEmbedding(ctx context.Context, imageBase64, 
 	if err := s.timetableService.CanStudentSignIntoClass(ctx, upstream.Data.UserID, classID); err != nil {
 		return nil, err
 	}
-	already, err := s.verificationRepo.HasSignedIn(ctx, upstream.Data.UserID, classID)
+	occurrenceDate := time.Now().UTC().Format("2006-01-02")
+	already, err := s.verificationRepo.HasSignedInForOccurrence(ctx, upstream.Data.UserID, classID, occurrenceDate)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +125,8 @@ func (s *VerificationService) SignInWithQRToken(ctx context.Context, userID, tok
 	if err := s.timetableService.CanStudentSignIntoClass(ctx, userID, classID); err != nil {
 		return err
 	}
-	already, err := s.verificationRepo.HasSignedIn(ctx, userID, classID)
+	occurrenceDate := time.Now().UTC().Format("2006-01-02")
+	already, err := s.verificationRepo.HasSignedInForOccurrence(ctx, userID, classID, occurrenceDate)
 	if err != nil {
 		return err
 	}
@@ -144,6 +154,45 @@ func (s *VerificationService) CleanupExpiredQRTokens(ctx context.Context) (int64
 	return s.verificationRepo.DeleteExpiredQRTokens(ctx)
 }
 
+func (s *VerificationService) GetOwnRecords(ctx context.Context, userID string) ([]*AttendanceRecord, error) {
+	rows, err := s.verificationRepo.GetOwnRecords(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return mapRecords(rows), nil
+}
+
+func (s *VerificationService) GetRecordsByClass(ctx context.Context, classID string) ([]*AttendanceRecord, error) {
+	rows, err := s.verificationRepo.GetRecordsByClass(ctx, classID)
+	if err != nil {
+		return nil, err
+	}
+	return mapRecords(rows), nil
+}
+
+func mapRecords(rows []verificationmodels.AttendanceRecord) []*AttendanceRecord {
+	out := make([]*AttendanceRecord, len(rows))
+	for i := range rows {
+		status := rows[i].Status
+		if status == "" {
+			status = "present"
+		}
+		out[i] = &AttendanceRecord{
+			RecordID:   rows[i].RecordID,
+			UserID:     rows[i].UserID,
+			ClassID:    rows[i].ClassID,
+			ClassName:  rows[i].ClassName,
+			ModuleCode: rows[i].ModuleCode,
+			ModuleName: rows[i].ModuleName,
+			Room:       rows[i].Room,
+			SignedInAt: rows[i].SignedInAt,
+			Method:     rows[i].Method,
+			Status:     status,
+		}
+	}
+	return out
+}
+
 func (s *VerificationService) RunQRTokenCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -158,4 +207,61 @@ func (s *VerificationService) RunQRTokenCleanup(interval time.Duration) {
 			log.Printf("QR token cleanup: removed %d expired tokens", n)
 		}
 	}
+}
+
+// ProcessEndedClasses creates absent records for enrolled students who did not sign in when their class ended.
+func (s *VerificationService) ProcessEndedClasses(ctx context.Context) (int, error) {
+	classes, err := s.timetableService.GetClassesEndedRecently(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get classes ended: %w", err)
+	}
+	var totalCreated int
+	for _, c := range classes {
+		userIDs, err := s.timetableService.GetEnrolledUserIDsForClass(ctx, c.ClassID)
+		if err != nil {
+			log.Printf("absent processor: get enrolled %s: %v", c.ClassID, err)
+			continue
+		}
+		for _, userID := range userIDs {
+			has, err := s.verificationRepo.HasRecordForClassOccurrence(ctx, userID, c.ClassID, c.OccurrenceDate)
+			if err != nil {
+				log.Printf("absent processor: check record %s %s: %v", userID, c.ClassID, err)
+				continue
+			}
+			if has {
+				continue
+			}
+			if err := s.verificationRepo.InsertAbsentRecord(ctx, userID, c.ClassID, c.OccurrenceEndAt); err != nil {
+				log.Printf("absent processor: insert absent %s %s: %v", userID, c.ClassID, err)
+				continue
+			}
+			totalCreated++
+		}
+	}
+	return totalCreated, nil
+}
+
+// RunAbsentRecordProcessor runs every interval, creating absent records for ended classes.
+func (s *VerificationService) RunAbsentRecordProcessor(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		ctx := context.Background()
+		n, err := s.ProcessEndedClasses(ctx)
+		if err != nil {
+			log.Printf("Absent record processor: %v", err)
+			continue
+		}
+		if n > 0 {
+			log.Printf("Absent record processor: created %d absent records", n)
+		}
+	}
+}
+
+// UpdateRecordStatus updates a record's status to excused or absent. Only allowed for records that are already absent/excused.
+func (s *VerificationService) UpdateRecordStatus(ctx context.Context, recordID, status string) error {
+	if status != "absent" && status != "excused" {
+		return fmt.Errorf("status must be absent or excused")
+	}
+	return s.verificationRepo.UpdateRecordStatus(ctx, recordID, status)
 }

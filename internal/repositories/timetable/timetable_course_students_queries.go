@@ -14,13 +14,14 @@ const courseStudentsTable = "course_students"
 
 var ErrCourseStudentNotFound = errors.New("course student assignment not found")
 
-func (r *TimetableRepository) CreateCourseStudent(ctx context.Context, courseID, userID string) error {
+func (r *TimetableRepository) CreateCourseStudent(ctx context.Context, courseID, userID string, yearOfStudy int) error {
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO `+courseStudentsTable+` (course_id, user_id, created_at, updated_at)
-		VALUES (CONVERT(uniqueidentifier, @p1), CONVERT(uniqueidentifier, @p2), SYSUTCDATETIME(), SYSUTCDATETIME())`,
+		`INSERT INTO `+courseStudentsTable+` (course_id, user_id, year_of_study, created_at, updated_at)
+		VALUES (CONVERT(uniqueidentifier, @p1), CONVERT(uniqueidentifier, @p2), @p3, SYSUTCDATETIME(), SYSUTCDATETIME())`,
 		courseID,
 		userID,
+		yearOfStudy,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to assign student to course: %w", err)
@@ -51,7 +52,7 @@ func (r *TimetableRepository) GetCourseStudents(ctx context.Context, courseID st
 	err := r.db.SelectContext(
 		ctx,
 		&students,
-		`SELECT `+query.Guid("course_id")+` as course_id, `+query.Guid("user_id")+` as user_id
+		`SELECT `+query.Guid("course_id")+` as course_id, `+query.Guid("user_id")+` as user_id, year_of_study
 		FROM `+courseStudentsTable+`
 		WHERE `+query.Guid("course_id")+` = LOWER(@p1)
 		ORDER BY user_id`,

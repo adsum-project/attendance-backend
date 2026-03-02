@@ -48,6 +48,10 @@ type UpdateClassRequest struct {
 	Recurrence *string `json:"recurrence"`
 }
 
+type AssignStudentToCourseRequest struct {
+	YearOfStudy int `json:"yearOfStudy"`
+}
+
 type NodeRoomAssignRequest struct {
 	Room string `json:"room"`
 }

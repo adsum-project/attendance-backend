@@ -8,6 +8,17 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
+func (p *TimetableProvider) GetModuleCourses(w http.ResponseWriter, r *http.Request) {
+	moduleID := router.PathParam(r, "module_id")
+
+	courses, err := p.timetable.GetModuleCourses(r.Context(), moduleID)
+	if err != nil {
+		response.JsonError(w, err)
+		return
+	}
+	response.OK(w, "", courses)
+}
+
 func (p *TimetableProvider) GetCourseModules(w http.ResponseWriter, r *http.Request) {
 	courseID := router.PathParam(r, "course_id")
 

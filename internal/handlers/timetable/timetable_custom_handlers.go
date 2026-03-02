@@ -30,7 +30,7 @@ func (p *TimetableProvider) GetOwnTimetable(w http.ResponseWriter, r *http.Reque
 }
 
 func (p *TimetableProvider) GetNodeTimetable(w http.ResponseWriter, r *http.Request) {
-	room := strings.TrimSpace(r.URL.Query().Get("room"))
+	room := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("room")))
 	if room == "" {
 		response.JsonError(w, errs.BadRequest("room query parameter is required"))
 		return
@@ -49,7 +49,7 @@ func (p *TimetableProvider) GetNodeRoom(w http.ResponseWriter, r *http.Request) 
 		response.JsonError(w, err)
 		return
 	}
-	response.OK(w, "", map[string]string{"room": room})
+	response.OK(w, "", map[string]string{"room": strings.ToUpper(room)})
 }
 
 func (p *TimetableProvider) UpdateNodeRoom(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +58,7 @@ func (p *TimetableProvider) UpdateNodeRoom(w http.ResponseWriter, r *http.Reques
 		response.JsonError(w, errs.BadRequest("invalid request body"))
 		return
 	}
-	room := strings.TrimSpace(req.Room)
+	room := strings.ToUpper(strings.TrimSpace(req.Room))
 	if room == "" {
 		response.JsonError(w, errs.BadRequest("room is required"))
 		return

@@ -49,6 +49,12 @@ func (t *TimetableService) GetModule(ctx context.Context, moduleID string) (*tim
 		}
 		return nil, err
 	}
+	if module.OwnerID != "" && t.graph != nil {
+		owner, err := t.graph.GetUser(ctx, module.OwnerID)
+		if err == nil && owner != nil {
+			module.CreatedByName = owner.DisplayName
+		}
+	}
 	return module, nil
 }
 

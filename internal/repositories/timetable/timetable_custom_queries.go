@@ -22,11 +22,11 @@ func (r *TimetableRepository) GetClassesByUserId(ctx context.Context, userID str
 		m.module_code, m.module_name,
 		CONVERT(VARCHAR(10), m.start_date, 23) as module_start_date, CONVERT(VARCHAR(10), m.end_date, 23) as module_end_date,
 		c.course_code, c.course_name,
-		cl.class_name, cl.room, cl.day_of_week,
+		cl.class_name, UPPER(LTRIM(RTRIM(cl.room))) as room, cl.day_of_week,
 		CONVERT(VARCHAR(8), cl.starts_at, 108) as starts_at, CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
 		cl.recurrence
 		FROM `+courseStudentsTable+` cs
-		INNER JOIN `+courseModulesTable+` cm ON cs.course_id = cm.course_id
+		INNER JOIN `+courseModulesTable+` cm ON cs.course_id = cm.course_id AND cs.year_of_study = cm.year_of_study
 		INNER JOIN `+modulesTable+` m ON cm.module_id = m.module_id
 		INNER JOIN `+classesTable+` cl ON m.module_id = cl.module_id
 		INNER JOIN `+coursesTable+` c ON cm.course_id = c.course_id
@@ -49,7 +49,7 @@ func (r *TimetableRepository) GetClassesByRoom(ctx context.Context, room string,
 		m.module_code, m.module_name,
 		CONVERT(VARCHAR(10), m.start_date, 23) as module_start_date, CONVERT(VARCHAR(10), m.end_date, 23) as module_end_date,
 		c.course_code, c.course_name,
-		cl.class_name, cl.room, cl.day_of_week,
+		cl.class_name, UPPER(LTRIM(RTRIM(cl.room))) as room, cl.day_of_week,
 		CONVERT(VARCHAR(8), cl.starts_at, 108) as starts_at, CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
 		cl.recurrence
 		FROM `+classesTable+` cl
@@ -76,7 +76,7 @@ func (r *TimetableRepository) GetNodeRoomByUserID(ctx context.Context, userID st
 	err := r.db.GetContext(
 		ctx,
 		&room,
-		`SELECT room FROM `+nodeRoomTable+`
+		`SELECT UPPER(LTRIM(RTRIM(room))) as room FROM `+nodeRoomTable+`
 		WHERE `+query.Guid("user_id")+` = LOWER(@p1)`,
 		userID,
 	)
@@ -90,7 +90,7 @@ func (r *TimetableRepository) GetNodeRoomByUserID(ctx context.Context, userID st
 }
 
 func (r *TimetableRepository) UpsertNodeRoom(ctx context.Context, userID, room string) error {
-	room = strings.TrimSpace(room)
+	room = strings.ToUpper(strings.TrimSpace(room))
 	if room == "" {
 		return fmt.Errorf("room cannot be empty")
 	}
@@ -134,7 +134,7 @@ func (r *TimetableRepository) StudentEnrolledInClass(ctx context.Context, userID
 		ctx,
 		`SELECT 1 FROM `+classesTable+` cl
 		INNER JOIN `+courseModulesTable+` cm ON cl.module_id = cm.module_id
-		INNER JOIN `+courseStudentsTable+` cs ON cm.course_id = cs.course_id
+		INNER JOIN `+courseStudentsTable+` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cs.year_of_study
 		WHERE `+query.Guid("cl.class_id")+` = LOWER(@p1) AND `+query.Guid("cs.user_id")+` = LOWER(@p2)`,
 		classID,
 		userID,
@@ -169,4 +169,66 @@ func (r *TimetableRepository) ClassCurrentlyRunning(ctx context.Context, classID
 		return false, fmt.Errorf("failed to check class running: %w", err)
 	}
 	return true, nil
+}
+
+// ClassEndedItem represents a class that has recently ended (for absent processing).
+type ClassEndedItem struct {
+	ClassID         string `db:"class_id"`
+	EndsAt          string `db:"ends_at"`
+	DayOfWeek       int    `db:"day_of_week"`
+	OccurrenceDate  string `db:"occurrence_date"`
+	OccurrenceEndAt string `db:"occurrence_end_at"`
+}
+
+// GetClassesEndedRecently returns classes whose occurrence ended in the last 10 minutes.
+// windowStart and nowStr are ISO datetime strings. dayOfWeek: 1=Mon .. 7=Sun (matches class.day_of_week).
+func (r *TimetableRepository) GetClassesEndedRecently(ctx context.Context, windowStart, nowStr string, dayOfWeek int) ([]ClassEndedItem, error) {
+	var rows []ClassEndedItem
+	err := r.db.SelectContext(
+		ctx,
+		&rows,
+		`SELECT `+query.Guid("cl.class_id")+` as class_id,
+		CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
+		cl.day_of_week,
+		CONVERT(VARCHAR(10), CAST(SYSUTCDATETIME() AS DATE), 23) as occurrence_date,
+		CONVERT(VARCHAR(33), occurrence_end, 127) as occurrence_end_at
+		FROM `+classesTable+` cl
+		INNER JOIN `+modulesTable+` m ON cl.module_id = m.module_id
+		CROSS APPLY (
+			SELECT CAST(CAST(CAST(SYSUTCDATETIME() AS DATE) AS DATETIME) + CAST(cl.ends_at AS DATETIME) AS DATETIME2) AS occurrence_end
+		) oe
+		WHERE cl.day_of_week = @p3
+		AND occurrence_end >= CAST(@p1 AS DATETIME2) AND occurrence_end <= CAST(@p2 AS DATETIME2)
+		AND CAST(SYSUTCDATETIME() AS DATE) >= m.start_date AND CAST(SYSUTCDATETIME() AS DATE) <= m.end_date`,
+		windowStart, nowStr, dayOfWeek,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get classes ended recently: %w", err)
+	}
+	return rows, nil
+}
+
+// GetEnrolledUserIDsForClass returns all user IDs enrolled in the given class (via course-module-class).
+func (r *TimetableRepository) GetEnrolledUserIDsForClass(ctx context.Context, classID string) ([]string, error) {
+	var rows []struct {
+		UserID string `db:"user_id"`
+	}
+	err := r.db.SelectContext(
+		ctx,
+		&rows,
+		`SELECT `+query.Guid("cs.user_id")+` as user_id
+		FROM `+classesTable+` cl
+		INNER JOIN `+courseModulesTable+` cm ON cl.module_id = cm.module_id
+		INNER JOIN `+courseStudentsTable+` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cs.year_of_study
+		WHERE `+query.Guid("cl.class_id")+` = LOWER(@p1)`,
+		classID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get enrolled users: %w", err)
+	}
+	ids := make([]string, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].UserID
+	}
+	return ids, nil
 }

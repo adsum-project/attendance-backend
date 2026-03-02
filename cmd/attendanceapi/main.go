@@ -99,6 +99,7 @@ func main() {
 	}
 
 	go verificationService.RunQRTokenCleanup(5 * time.Minute)
+	go verificationService.RunAbsentRecordProcessor(5 * time.Minute)
 	verificationProvider, err := verificationhandlers.NewVerificationProvider(verificationService)
 	if err != nil {
 		log.Fatal("Error initializing verification provider: ", err)
@@ -123,6 +124,8 @@ func main() {
 		r.Put("/embeddings", verificationProvider.UpdateEmbedding).Use(middleware.RequireAuth(authService))
 		r.Delete("/embeddings", verificationProvider.DeleteEmbedding).Use(middleware.RequireAuth(authService))
 		r.Post("/embeddings/verify", verificationProvider.VerifyEmbedding).Use(middleware.RequireAuth(authService))
+		r.Get("/records", verificationProvider.GetRecords).Use(middleware.RequireAuth(authService, "default", "admin", "staff"))
+		r.Patch("/records/{record_id}", verificationProvider.PatchRecordStatus).Use(middleware.RequireAuth(authService, "admin", "staff"))
 
 		r.Get("/qr/verify", verificationProvider.QRVerify).Use(middleware.RequireAuthWithRedirect(authService, os.Getenv("FRONTEND_URL")+"/", "default"))
 		r.Get("/qr", verificationProvider.QRStream).Use(middleware.RequireAuth(authService, "admin"))
@@ -156,6 +159,7 @@ func main() {
 		r.Patch("/modules/{module_id}", timetableProvider.UpdateModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Delete("/modules/{module_id}", timetableProvider.DeleteModule).Use(middleware.RequireAuth(authService, "admin", "staff"))
 
+		r.Get("/modules/{module_id}/courses", timetableProvider.GetModuleCourses).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Get("/modules/{module_id}/classes", timetableProvider.GetClasses).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Get("/modules/{module_id}/classes/{class_id}", timetableProvider.GetClass).Use(middleware.RequireAuth(authService, "admin", "staff"))
 		r.Post("/modules/{module_id}/classes", timetableProvider.CreateClass).Use(middleware.RequireAuth(authService, "admin", "staff"))

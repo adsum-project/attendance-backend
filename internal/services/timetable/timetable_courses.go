@@ -47,6 +47,12 @@ func (t *TimetableService) GetCourse(ctx context.Context, courseID string) (*tim
 		}
 		return nil, err
 	}
+	if course.OwnerID != "" && t.graph != nil {
+		owner, err := t.graph.GetUser(ctx, course.OwnerID)
+		if err == nil && owner != nil {
+			course.CreatedByName = owner.DisplayName
+		}
+	}
 	return course, nil
 }
 

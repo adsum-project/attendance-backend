@@ -6,6 +6,7 @@ import (
 	"time"
 
 	timetablemodels "github.com/adsum-project/attendance-backend/internal/models/timetable"
+	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/utils/datetime"
 )
 
@@ -97,4 +98,20 @@ func (t *TimetableService) CanStudentSignIntoClass(ctx context.Context, userID, 
 	}
 
 	return nil
+}
+
+func (t *TimetableService) GetClassesEndedRecently(ctx context.Context) ([]timetablerepo.ClassEndedItem, error) {
+	now := time.Now().UTC()
+	windowStart := now.Add(-10 * time.Minute).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+	weekday := now.Weekday()
+	dayOfWeek := int(weekday)
+	if weekday == 0 {
+		dayOfWeek = 7
+	}
+	return t.repo.GetClassesEndedRecently(ctx, windowStart, nowStr, dayOfWeek)
+}
+
+func (t *TimetableService) GetEnrolledUserIDsForClass(ctx context.Context, classID string) ([]string, error) {
+	return t.repo.GetEnrolledUserIDsForClass(ctx, classID)
 }

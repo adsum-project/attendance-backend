@@ -5,13 +5,14 @@ import (
 	"errors"
 	"slices"
 
-	usermodels "github.com/adsum-project/attendance-backend/internal/models/user"
+	timetablemodels "github.com/adsum-project/attendance-backend/internal/models/timetable"
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
+	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
-func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID string) ([]usermodels.User, error) {
+func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID string) ([]timetablemodels.CourseStudentEnrollment, error) {
 	_, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrCourseNotFound) {
@@ -25,7 +26,7 @@ func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID strin
 		return nil, err
 	}
 	if len(assignments) == 0 {
-		return []usermodels.User{}, nil
+		return []timetablemodels.CourseStudentEnrollment{}, nil
 	}
 
 	ids := make([]string, len(assignments))
@@ -38,25 +39,26 @@ func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID strin
 		return nil, err
 	}
 
-	userByID := make(map[string]usermodels.User)
+	userByID := make(map[string]*timetablemodels.CourseStudentEnrollment)
 	for _, u := range graphUsers {
-		userByID[u.ID] = usermodels.User{
+		userByID[u.ID] = &timetablemodels.CourseStudentEnrollment{
 			UserID:      u.ID,
 			DisplayName: u.DisplayName,
 			Email:       u.Mail,
 		}
 	}
 
-	result := make([]usermodels.User, 0, len(ids))
-	for _, id := range ids {
-		if u, ok := userByID[id]; ok {
-			result = append(result, u)
+	result := make([]timetablemodels.CourseStudentEnrollment, 0, len(assignments))
+	for _, a := range assignments {
+		if u, ok := userByID[a.UserID]; ok {
+			u.YearOfStudy = a.YearOfStudy
+			result = append(result, *u)
 		}
 	}
 	return result, nil
 }
 
-func (t *TimetableService) AssignStudentToCourse(ctx context.Context, courseID, userID string) error {
+func (t *TimetableService) AssignStudentToCourse(ctx context.Context, courseID, userID string, yearOfStudy int) error {
 	course, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrCourseNotFound) {
@@ -66,6 +68,12 @@ func (t *TimetableService) AssignStudentToCourse(ctx context.Context, courseID, 
 	}
 	if !authorization.IsOwnerOrAdmin(ctx, course.OwnerID) {
 		return errs.Forbidden("")
+	}
+
+	var v validation.Errors
+	v.Add(validation.IntRange(yearOfStudy, "yearOfStudy", 1, 6))
+	if err := v.Result(); err != nil {
+		return err
 	}
 
 	graphUser, err := t.graph.GetUser(ctx, userID)
@@ -92,7 +100,7 @@ func (t *TimetableService) AssignStudentToCourse(ctx context.Context, courseID, 
 		return errs.Error(409, "student is already assigned to this course")
 	}
 
-	return t.repo.CreateCourseStudent(ctx, courseID, userID)
+	return t.repo.CreateCourseStudent(ctx, courseID, userID, yearOfStudy)
 }
 
 func (t *TimetableService) UnassignStudentFromCourse(ctx context.Context, courseID, userID string) error {

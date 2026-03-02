@@ -67,6 +67,24 @@ func (r *TimetableRepository) GetCourseModules(ctx context.Context, courseID str
 	return modules, nil
 }
 
+func (r *TimetableRepository) GetModuleCourses(ctx context.Context, moduleID string) ([]timetablemodels.ModuleCourse, error) {
+	var courses []timetablemodels.ModuleCourse
+	err := r.db.SelectContext(
+		ctx,
+		&courses,
+		`SELECT `+query.Guid("c.course_id")+` as course_id, c.course_code, c.course_name, c.campus, cm.year_of_study
+		FROM `+courseModulesTable+` cm
+		INNER JOIN courses c ON cm.course_id = c.course_id
+		WHERE `+query.Guid("cm.module_id")+` = LOWER(@p1)
+		ORDER BY cm.year_of_study, c.course_code`,
+		moduleID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get module courses: %w", err)
+	}
+	return courses, nil
+}
+
 func (r *TimetableRepository) CourseModuleExists(ctx context.Context, courseID, moduleID string) (bool, error) {
 	var exists int
 	err := r.db.QueryRowContext(

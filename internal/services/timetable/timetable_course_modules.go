@@ -11,6 +11,17 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
+func (t *TimetableService) GetModuleCourses(ctx context.Context, moduleID string) ([]timetablemodels.ModuleCourse, error) {
+	_, err := t.repo.GetModuleByID(ctx, moduleID)
+	if err != nil {
+		if errors.Is(err, timetablerepo.ErrModuleNotFound) {
+			return nil, errs.NotFound("Module not found")
+		}
+		return nil, err
+	}
+	return t.repo.GetModuleCourses(ctx, moduleID)
+}
+
 func (t *TimetableService) GetCourseModules(ctx context.Context, courseID string) ([]timetablemodels.CourseModule, error) {
 	_, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {
