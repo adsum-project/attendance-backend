@@ -14,18 +14,29 @@ const coursesTable = "courses"
 
 var ErrCourseNotFound = errors.New("course not found")
 
-func (r *TimetableRepository) GetCourses(ctx context.Context, page, perPage int) ([]timetablemodels.Course, error) {
+func (r *TimetableRepository) GetCourses(ctx context.Context, page, perPage int, search, sortBy, sortOrder string) ([]timetablemodels.Course, error) {
 	var courses []timetablemodels.Course
 	offset := (page - 1) * perPage
+	where := ""
+	args := []any{offset, perPage}
+	if search != "" {
+		where = " WHERE (course_code LIKE '%' + @p3 + '%' OR course_name LIKE '%' + @p3 + '%' OR campus LIKE '%' + @p3 + '%')"
+		args = append(args, search)
+	}
+	order := query.OrderBy(sortBy, sortOrder, "ORDER BY created_at", map[string]string{
+		"courseCode": "course_code",
+		"courseName":  "course_name",
+		"campus":      "campus",
+	})
 	err := r.db.SelectContext(
 		ctx,
 		&courses,
 		`SELECT `+query.Guid("course_id")+` as course_id, course_code, course_name, campus, `+query.Guid("owner_id")+` as owner_id, created_at, updated_at
 		FROM `+coursesTable+`
-		ORDER BY created_at
+		`+where+`
+		`+order+`
 		OFFSET @p1 ROWS FETCH NEXT @p2 ROWS ONLY`,
-		offset,
-		perPage,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses: %w", err)
@@ -35,14 +46,10 @@ func (r *TimetableRepository) GetCourses(ctx context.Context, page, perPage int)
 
 func (r *TimetableRepository) GetCourseByID(ctx context.Context, courseID string) (*timetablemodels.Course, error) {
 	var course timetablemodels.Course
-	err := r.db.GetContext(
-		ctx,
-		&course,
-		`SELECT `+query.Guid("course_id")+` as course_id, course_code, course_name, campus, `+query.Guid("owner_id")+` as owner_id, created_at, updated_at
-		FROM `+coursesTable+`
-		WHERE `+query.Guid("course_id")+` = LOWER(@p1)`,
-		courseID,
-	)
+	q := `SELECT ` + query.Guid("course_id") + ` as course_id, course_code, course_name, campus, ` + query.Guid("owner_id") + ` as owner_id, created_at, updated_at
+		FROM ` + coursesTable + `
+		WHERE ` + query.GuidWhere("course_id", "@p1")
+	err := r.db.GetContext(ctx, &course, q, courseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrCourseNotFound
@@ -60,7 +67,7 @@ func (r *TimetableRepository) GetCoursesByUserId(ctx context.Context, userID str
 		`SELECT `+query.Guid("c.course_id")+` as course_id, c.course_code, c.course_name, c.campus, `+query.Guid("c.owner_id")+` as owner_id, c.created_at, c.updated_at
 		FROM `+courseStudentsTable+` cs
 		INNER JOIN `+coursesTable+` c ON cs.course_id = c.course_id
-		WHERE `+query.Guid("cs.user_id")+` = LOWER(@p1)
+		WHERE `+query.GuidWhere("cs.user_id", "@p1")+`
 		ORDER BY c.course_code`,
 		userID,
 	)
@@ -70,9 +77,15 @@ func (r *TimetableRepository) GetCoursesByUserId(ctx context.Context, userID str
 	return courses, nil
 }
 
-func (r *TimetableRepository) GetCoursesCount(ctx context.Context) (int, error) {
+func (r *TimetableRepository) GetCoursesCount(ctx context.Context, search string) (int, error) {
 	var total int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+coursesTable).Scan(&total)
+	q := `SELECT COUNT(*) FROM ` + coursesTable
+	args := []any{}
+	if search != "" {
+		q += ` WHERE (course_code LIKE '%' + @p1 + '%' OR course_name LIKE '%' + @p1 + '%' OR campus LIKE '%' + @p1 + '%')`
+		args = append(args, search)
+	}
+	err := r.db.QueryRowContext(ctx, q, args...).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses: %w", err)
 	}
@@ -120,7 +133,7 @@ func (r *TimetableRepository) UpdateCourse(ctx context.Context, courseID string,
 		"campus":      campus,
 	})
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE `+coursesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.Guid("course_id")+` = LOWER(`+nextParam+`)`,
+		`UPDATE `+coursesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.GuidWhere("course_id", nextParam),
 		append(args, courseID)...,
 	)
 	if err != nil {
@@ -136,7 +149,7 @@ func (r *TimetableRepository) UpdateCourse(ctx context.Context, courseID string,
 func (r *TimetableRepository) DeleteCourse(ctx context.Context, courseID string) error {
 	result, err := r.db.ExecContext(
 		ctx,
-		`DELETE FROM `+coursesTable+` WHERE `+query.Guid("course_id")+` = LOWER(@p1)`,
+		`DELETE FROM `+coursesTable+` WHERE `+query.GuidWhere("course_id", "@p1"),
 		courseID,
 	)
 	if err != nil {

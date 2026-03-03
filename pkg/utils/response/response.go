@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
+	"github.com/adsum-project/attendance-backend/pkg/utils/pagination"
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
@@ -239,4 +240,9 @@ func PaginatedResponse(w http.ResponseWriter, message string, data any, page, pe
 		TotalPages: totalPages,
 	}
 	JsonSuccessWithMeta(w, http.StatusOK, message, data, meta)
+}
+
+// PaginatedResponseFromResult writes a paginated JSON response from pagination.Result.
+func PaginatedResponseFromResult[T any](w http.ResponseWriter, message string, result *pagination.Result[T]) {
+	PaginatedResponse(w, message, result.Data, result.Page, result.PerPage, result.Total)
 }

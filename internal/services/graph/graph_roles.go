@@ -12,6 +12,7 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
 )
 
+// GetUserRoles returns the app role names assigned to the user in Entra.
 func (g *GraphService) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
 	roleMap, spID, err := g.getAppRoleMap(ctx)
 	if err != nil {
@@ -36,7 +37,7 @@ func (g *GraphService) getAppRoleMap(ctx context.Context) (map[string]string, st
 	clientID := os.Getenv("ENTRA_CLIENT_ID")
 	path := fmt.Sprintf("/servicePrincipals(appId='%s')?$select=id,appRoles", clientID)
 
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, graphBaseURL, path, nil, nil, nil)
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, g.baseURL, path, nil, nil, nil)
 	if err != nil {
 		return nil, "", errs.BadGateway("graph service principal: " + err.Error())
 	}
@@ -64,7 +65,7 @@ func (g *GraphService) getAppRoleAssignments(ctx context.Context, userID, resour
 	query := url.Values{}
 	query.Set("$filter", fmt.Sprintf("resourceId eq %s", resourceID))
 
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, graphBaseURL, path, query, nil, nil)
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, g.baseURL, path, query, nil, nil)
 	if err != nil {
 		return nil, errs.BadGateway("graph app role assignments: " + err.Error())
 	}

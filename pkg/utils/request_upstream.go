@@ -15,6 +15,7 @@ type UpstreamResponse struct {
 	Body       []byte
 }
 
+// RequestUpstream performs an HTTP request and returns status, headers, and body.
 func RequestUpstream(
 	ctx context.Context,
 	client *http.Client,

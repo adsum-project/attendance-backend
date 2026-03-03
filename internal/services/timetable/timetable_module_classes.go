@@ -9,10 +9,11 @@ import (
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
+	"github.com/adsum-project/attendance-backend/pkg/utils/pagination"
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
-func (t *TimetableService) GetClasses(ctx context.Context, moduleID string) ([]timetablemodels.Class, error) {
+func (t *TimetableService) GetClasses(ctx context.Context, moduleID string, page, perPage int) (*pagination.Result[timetablemodels.Class], error) {
 	_, err := t.repo.GetModuleByID(ctx, moduleID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrModuleNotFound) {
@@ -20,7 +21,8 @@ func (t *TimetableService) GetClasses(ctx context.Context, moduleID string) ([]t
 		}
 		return nil, err
 	}
-	return t.repo.GetClasses(ctx, moduleID)
+	fetch, count := pagination.BindID(moduleID, t.repo.GetClasses, t.repo.GetClassesCount)
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
 }
 
 func (t *TimetableService) GetClass(ctx context.Context, moduleID, classID string) (*timetablemodels.Class, error) {
@@ -57,9 +59,9 @@ func (t *TimetableService) CreateClass(ctx context.Context, moduleID, className,
 
 	var v validation.Errors
 	v.Add(validation.Required(className, "className"))
-	v.Add(validation.LengthRange(className, "className", 1, 100))
+	v.Add(validation.LengthRange(className, "className", 3, 50))
 	v.Add(validation.Required(room, "room"))
-	v.Add(validation.LengthRange(room, "room", 1, 100))
+	v.Add(validation.LengthRange(room, "room", 3, 50))
 	v.Add(validation.IntRange(dayOfWeek, "dayOfWeek", 1, 7))
 	v.Add(validation.Required(startsAt, "startsAt"))
 	v.Add(validation.TimeFormat(startsAt, "startsAt"))
@@ -114,11 +116,11 @@ func (t *TimetableService) UpdateClass(ctx context.Context, moduleID, classID st
 	var v validation.Errors
 	if className != nil {
 		v.Add(validation.Required(*className, "className"))
-		v.Add(validation.LengthRange(*className, "className", 1, 100))
+		v.Add(validation.LengthRange(*className, "className", 3, 50))
 	}
 	if room != nil {
 		v.Add(validation.Required(*room, "room"))
-		v.Add(validation.LengthRange(*room, "room", 1, 100))
+		v.Add(validation.LengthRange(*room, "room", 3, 50))
 	}
 	if dayOfWeek != nil {
 		v.Add(validation.IntRange(*dayOfWeek, "dayOfWeek", 1, 7))

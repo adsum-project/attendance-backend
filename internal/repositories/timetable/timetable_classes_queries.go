@@ -14,40 +14,46 @@ const classesTable = "classes"
 
 var ErrClassNotFound = errors.New("class not found")
 
-func (r *TimetableRepository) GetClasses(ctx context.Context, moduleID string) ([]timetablemodels.Class, error) {
-	var classes []timetablemodels.Class
-	err := r.db.SelectContext(
-		ctx,
-		&classes,
-		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, UPPER(LTRIM(RTRIM(room))) as room,
-		day_of_week, CONVERT(VARCHAR(8), starts_at, 108) as starts_at, CONVERT(VARCHAR(8), ends_at, 108) as ends_at,
+func (r *TimetableRepository) GetClasses(ctx context.Context, moduleID string, page, perPage int) ([]timetablemodels.Class, error) {
+	baseQuery := `SELECT ` + query.Guid("class_id") + ` as class_id, ` + query.Guid("module_id") + ` as module_id, class_name, ` + query.Room("room") + ` as room,
+		day_of_week, ` + query.Time("starts_at") + ` as starts_at, ` + query.Time("ends_at") + ` as ends_at,
 		recurrence,
-		CONVERT(VARCHAR(33), created_at, 127) as created_at, CONVERT(VARCHAR(33), updated_at, 127) as updated_at
-		FROM `+classesTable+`
-		WHERE `+query.Guid("module_id")+` = LOWER(@p1)
-		ORDER BY day_of_week, starts_at`,
-		moduleID,
-	)
+		` + query.DateTimeISO("created_at") + ` as created_at, ` + query.DateTimeISO("updated_at") + ` as updated_at
+		FROM ` + classesTable + `
+		WHERE ` + query.GuidWhere("module_id", "@p1") + `
+		ORDER BY day_of_week, starts_at`
+	args := []any{moduleID}
+	if page > 0 && perPage > 0 {
+		baseQuery += ` OFFSET @p2 ROWS FETCH NEXT @p3 ROWS ONLY`
+		args = append(args, (page-1)*perPage, perPage)
+	}
+	var classes []timetablemodels.Class
+	err := r.db.SelectContext(ctx, &classes, baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get classes: %w", err)
 	}
 	return classes, nil
 }
 
+func (r *TimetableRepository) GetClassesCount(ctx context.Context, moduleID string) (int, error) {
+	var total int
+	q := `SELECT COUNT(*) FROM ` + classesTable + ` WHERE ` + query.GuidWhere("module_id", "@p1")
+	err := r.db.QueryRowContext(ctx, q, moduleID).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count classes: %w", err)
+	}
+	return total, nil
+}
+
 func (r *TimetableRepository) GetClassByID(ctx context.Context, moduleID, classID string) (*timetablemodels.Class, error) {
 	var class timetablemodels.Class
-	err := r.db.GetContext(
-		ctx,
-		&class,
-		`SELECT `+query.Guid("class_id")+` as class_id, `+query.Guid("module_id")+` as module_id, class_name, UPPER(LTRIM(RTRIM(room))) as room,
-		day_of_week, CONVERT(VARCHAR(8), starts_at, 108) as starts_at, CONVERT(VARCHAR(8), ends_at, 108) as ends_at,
+	q := `SELECT ` + query.Guid("class_id") + ` as class_id, ` + query.Guid("module_id") + ` as module_id, class_name, ` + query.Room("room") + ` as room,
+		day_of_week, ` + query.Time("starts_at") + ` as starts_at, ` + query.Time("ends_at") + ` as ends_at,
 		recurrence,
-		CONVERT(VARCHAR(33), created_at, 127) as created_at, CONVERT(VARCHAR(33), updated_at, 127) as updated_at
-		FROM `+classesTable+`
-		WHERE `+query.Guid("module_id")+` = LOWER(@p1) AND `+query.Guid("class_id")+` = LOWER(@p2)`,
-		moduleID,
-		classID,
-	)
+		` + query.DateTimeISO("created_at") + ` as created_at, ` + query.DateTimeISO("updated_at") + ` as updated_at
+		FROM ` + classesTable + `
+		WHERE ` + query.GuidWhere("module_id", "@p1") + ` AND ` + query.GuidWhere("class_id", "@p2")
+	err := r.db.GetContext(ctx, &class, q, moduleID, classID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrClassNotFound
@@ -63,7 +69,7 @@ func (r *TimetableRepository) HasRoomConflict(ctx context.Context, room string, 
 		AND starts_at < CAST(@p3 AS TIME) AND ends_at > CAST(@p4 AS TIME)`
 	args := []any{room, dayOfWeek, endsAt, startsAt}
 	if excludeClassID != "" {
-		queryStr += ` AND ` + query.Guid("class_id") + ` != LOWER(@p5)`
+		queryStr += ` AND class_id != CONVERT(uniqueidentifier, @p5)`
 		args = append(args, excludeClassID)
 	}
 	var exists int
@@ -109,7 +115,7 @@ func (r *TimetableRepository) UpdateClass(ctx context.Context, moduleID, classID
 	}
 	nextParam2 := "@p" + fmt.Sprint(len(args)+2)
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE `+classesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.Guid("module_id")+` = LOWER(`+nextParam+`) AND `+query.Guid("class_id")+` = LOWER(`+nextParam2+`)`,
+		`UPDATE `+classesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.GuidWhere("module_id", nextParam)+` AND `+query.GuidWhere("class_id", nextParam2),
 		append(args, moduleID, classID)...,
 	)
 	if err != nil {
@@ -123,12 +129,8 @@ func (r *TimetableRepository) UpdateClass(ctx context.Context, moduleID, classID
 }
 
 func (r *TimetableRepository) DeleteClass(ctx context.Context, moduleID, classID string) error {
-	result, err := r.db.ExecContext(
-		ctx,
-		`DELETE FROM `+classesTable+` WHERE `+query.Guid("module_id")+` = LOWER(@p1) AND `+query.Guid("class_id")+` = LOWER(@p2)`,
-		moduleID,
-		classID,
-	)
+	q := `DELETE FROM ` + classesTable + ` WHERE ` + query.GuidWhere("module_id", "@p1") + ` AND ` + query.GuidWhere("class_id", "@p2")
+	result, err := r.db.ExecContext(ctx, q, moduleID, classID)
 	if err != nil {
 		return fmt.Errorf("failed to delete class: %w", err)
 	}

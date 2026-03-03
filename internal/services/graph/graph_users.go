@@ -13,9 +13,10 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
 )
 
+// GetUser fetches a user by ID from Microsoft Graph. Returns nil if not found.
 func (g *GraphService) GetUser(ctx context.Context, userID string) (*graphmodels.GraphUser, error) {
 	path := "/users/" + url.PathEscape(userID)
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, graphBaseURL, path, nil, nil, nil)
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, g.baseURL, path, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("graph user: %w", err)
 	}
@@ -32,12 +33,16 @@ func (g *GraphService) GetUser(ctx context.Context, userID string) (*graphmodels
 	return &user, nil
 }
 
-func (g *GraphService) GetUsersCount(ctx context.Context) (int, error) {
+func (g *GraphService) GetUsersCount(ctx context.Context, search string) (int, error) {
 	path := "/users?$top=1&$count=true&$orderby=displayName"
+	if search != "" {
+		searchClause := fmt.Sprintf("\"displayName:%s\" OR \"mail:%s\"", search, search)
+		path = "/users?$search=" + url.QueryEscape(searchClause) + "&$top=1&$count=true&$orderby=displayName"
+	}
 	headers := http.Header{}
 	headers.Set("ConsistencyLevel", "eventual")
 
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, graphBaseURL, path, nil, headers, nil)
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, g.baseURL, path, nil, headers, nil)
 	if err != nil {
 		return 0, fmt.Errorf("graph users count: %w", err)
 	}
@@ -51,12 +56,25 @@ func (g *GraphService) GetUsersCount(ctx context.Context) (int, error) {
 	return data.Count, nil
 }
 
-func (g *GraphService) GetUsers(ctx context.Context, page, perPage int) ([]graphmodels.GraphUser, error) {
-	path := fmt.Sprintf("/users?$top=%d&$count=true&$orderby=displayName", perPage)
+// GetUsers fetches a page of users from Graph. Supports search (displayName/mail) and sort (displayName/mail).
+func (g *GraphService) GetUsers(ctx context.Context, page, perPage int, search, sortBy, sortOrder string) ([]graphmodels.GraphUser, error) {
+	orderBy := "displayName"
+	if sortBy == "mail" {
+		orderBy = "mail"
+	}
+	if sortOrder == "desc" {
+		orderBy += " desc"
+	}
+	path := fmt.Sprintf("/users?$top=%d&$count=true&$orderby=%s", perPage, url.QueryEscape(orderBy))
+	if search != "" {
+		searchClause := fmt.Sprintf("\"displayName:%s\" OR \"mail:%s\"", search, search)
+		path = fmt.Sprintf("/users?$search=%s&$top=%d&$count=true&$orderby=%s",
+			url.QueryEscape(searchClause), perPage, url.QueryEscape(orderBy))
+	}
 	headers := http.Header{}
 	headers.Set("ConsistencyLevel", "eventual")
 
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, graphBaseURL, path, nil, headers, nil)
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodGet, g.baseURL, path, nil, headers, nil)
 	if err != nil {
 		return nil, fmt.Errorf("graph users: %w", err)
 	}
@@ -102,6 +120,7 @@ func (g *GraphService) getUsersFromURL(ctx context.Context, pageURL string) ([]g
 	return data.Value, data.NextLink, nil
 }
 
+// GetUsersByIDs fetches multiple users by ID in a single Graph API call.
 func (g *GraphService) GetUsersByIDs(ctx context.Context, ids []string) ([]graphmodels.GraphUser, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -119,7 +138,7 @@ func (g *GraphService) GetUsersByIDs(ctx context.Context, ids []string) ([]graph
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
 
-	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodPost, graphBaseURL, "/directoryObjects/getByIds", nil, headers, bytes.NewReader(jsonBody))
+	res, err := utils.RequestUpstream(ctx, g.httpClient, http.MethodPost, g.baseURL, "/directoryObjects/getByIds", nil, headers, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, errs.BadGateway("graph getByIds: " + err.Error())
 	}

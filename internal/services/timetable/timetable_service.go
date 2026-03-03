@@ -14,6 +14,7 @@ type TimetableService struct {
 	graph *graphservice.GraphService
 }
 
+// NewTimetableService creates the timetable service with repo and optional Graph client for owner resolution.
 func NewTimetableService(repo *timetablerepo.TimetableRepository, graph *graphservice.GraphService) (*TimetableService, error) {
 	if repo == nil {
 		return nil, errTimetableRepoMissing

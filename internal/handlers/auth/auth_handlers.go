@@ -8,6 +8,7 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
+// Login returns the Entra OAuth URL for the user to sign in.
 func (p *AuthProvider) Login(w http.ResponseWriter, r *http.Request) {
 	state, err := auth.GenerateRandomString(32)
 	if err != nil {
@@ -31,6 +32,7 @@ func (p *AuthProvider) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Callback handles the OAuth redirect, validates the code, creates a session, and redirects to frontend.
 func (p *AuthProvider) Callback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -125,6 +127,7 @@ func (p *AuthProvider) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Logout deletes the session and clears auth cookies.
 func (p *AuthProvider) Logout(w http.ResponseWriter, r *http.Request) {
 	if sessionID, err := p.auth.GetSessionCookie(r); err == nil {
 		_ = p.auth.DeleteSession(r.Context(), sessionID)

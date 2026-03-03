@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -21,12 +22,21 @@ func (p *TimetableProvider) GetOwnCourses(w http.ResponseWriter, r *http.Request
 func (p *TimetableProvider) GetCourses(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
-	courses, total, page, perPage, err := p.timetable.GetCourses(r.Context(), page, perPage)
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	sortBy := strings.TrimSpace(r.URL.Query().Get("sortBy"))
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sortOrder"))
+	if sortBy != "" && sortBy != "courseCode" && sortBy != "courseName" && sortBy != "campus" {
+		sortBy = ""
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = ""
+	}
+	result, err := p.timetable.GetCourses(r.Context(), page, perPage, search, sortBy, sortOrder)
 	if err != nil {
 		response.JsonError(w, err)
 		return
 	}
-	response.PaginatedResponse(w, "", courses, page, perPage, total)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *TimetableProvider) GetCourse(w http.ResponseWriter, r *http.Request) {

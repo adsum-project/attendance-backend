@@ -10,6 +10,7 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
 )
 
+// RequireAuthWithRedirect ensures the request has a valid session; optionally checks roles. Redirects unauthenticated users.
 func RequireAuthWithRedirect(a *auth.AuthService, redirectURL string, roles ...string) router.Middleware {
 	return func(handler router.Handler) router.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +68,12 @@ func RequireAuthWithRedirect(a *auth.AuthService, redirectURL string, roles ...s
 	}
 }
 
+// RequireAuth ensures the request has a valid session; optionally checks roles.
 func RequireAuth(a *auth.AuthService, roles ...string) router.Middleware {
 	return RequireAuthWithRedirect(a, "", roles...)
 }
 
+// RequireNoAuth fails if the user is already authenticated (e.g. for login page).
 func RequireNoAuth(a *auth.AuthService) router.Middleware {
 	return func(handler router.Handler) router.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {

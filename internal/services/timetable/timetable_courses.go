@@ -12,6 +12,7 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
+// CreateCourse creates a course owned by the authenticated user.
 func (t *TimetableService) CreateCourse(ctx context.Context, courseCode, courseName, campus string) (string, error) {
 	ownerID, _ := ctx.Value("userID").(string)
 	var v validation.Errors
@@ -20,10 +21,10 @@ func (t *TimetableService) CreateCourse(ctx context.Context, courseCode, courseN
 	v.Add(validation.ExactLength(courseCode, "courseCode", 4))
 	v.Add(validation.Required(courseName, "courseName"))
 	v.Add(validation.Alphanumeric(courseName, "courseName", true))
-	v.Add(validation.LengthRange(courseName, "courseName", 1, 100))
+	v.Add(validation.LengthRange(courseName, "courseName", 3, 50))
 	v.Add(validation.Required(campus, "campus"))
 	v.Add(validation.LettersOnly(campus, "campus"))
-	v.Add(validation.LengthRange(campus, "campus", 1, 20))
+	v.Add(validation.LengthRange(campus, "campus", 3, 30))
 	if err := v.Result(); err != nil {
 		return "", err
 	}
@@ -56,10 +57,17 @@ func (t *TimetableService) GetCourse(ctx context.Context, courseID string) (*tim
 	return course, nil
 }
 
-func (t *TimetableService) GetCourses(ctx context.Context, page, perPage int) ([]timetablemodels.Course, int, int, int, error) {
-	return pagination.Paginate(ctx, page, perPage, t.repo.GetCourses, t.repo.GetCoursesCount)
+func (t *TimetableService) GetCourses(ctx context.Context, page, perPage int, search, sortBy, sortOrder string) (*pagination.Result[timetablemodels.Course], error) {
+	fetch := func(ctx context.Context, p, pp int) ([]timetablemodels.Course, error) {
+		return t.repo.GetCourses(ctx, p, pp, search, sortBy, sortOrder)
+	}
+	count := func(ctx context.Context) (int, error) {
+		return t.repo.GetCoursesCount(ctx, search)
+	}
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
 }
 
+// GetOwnCourses returns courses the authenticated user is enrolled in.
 func (t *TimetableService) GetOwnCourses(ctx context.Context) ([]timetablemodels.Course, error) {
 	userID, _ := ctx.Value("userID").(string)
 	if userID == "" {
@@ -92,12 +100,12 @@ func (t *TimetableService) UpdateCourse(ctx context.Context, courseID string, co
 	if courseName != nil {
 		v.Add(validation.Required(*courseName, "courseName"))
 		v.Add(validation.Alphanumeric(*courseName, "courseName", true))
-		v.Add(validation.LengthRange(*courseName, "courseName", 1, 100))
+		v.Add(validation.LengthRange(*courseName, "courseName", 3, 50))
 	}
 	if campus != nil {
 		v.Add(validation.Required(*campus, "campus"))
 		v.Add(validation.LettersOnly(*campus, "campus"))
-		v.Add(validation.LengthRange(*campus, "campus", 1, 20))
+		v.Add(validation.LengthRange(*campus, "campus", 3, 30))
 	}
 	if err := v.Result(); err != nil {
 		return err

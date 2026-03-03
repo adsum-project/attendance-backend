@@ -20,6 +20,7 @@ type AuthService struct {
 
 var errSessionRepoMissing = errors.New("session repository is required")
 
+// NewAuthService builds the auth service with Entra OIDC and session storage.
 func NewAuthService(sessionRepo *authrepo.SessionRepository) (*AuthService, error) {
 	if sessionRepo == nil {
 		return nil, errSessionRepoMissing
@@ -75,4 +76,10 @@ func NewAuthService(sessionRepo *authrepo.SessionRepository) (*AuthService, erro
 		cookieDomain: cookieDomain,
 		sessionRepo:  sessionRepo,
 	}, nil
+}
+
+// NewAuthServiceForTesting returns an AuthService with only the session repository configured.
+// Use for testing CreateSession, GetSession, DeleteSession, GetUserIDFromClaims. OIDC methods will panic if called.
+func NewAuthServiceForTesting(sessionRepo *authrepo.SessionRepository) *AuthService {
+	return &AuthService{sessionRepo: sessionRepo}
 }

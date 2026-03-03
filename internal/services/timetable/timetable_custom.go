@@ -10,6 +10,7 @@ import (
 	"github.com/adsum-project/attendance-backend/pkg/utils/datetime"
 )
 
+// GetOwnTimetable returns the user's classes for the given week.
 func (t *TimetableService) GetOwnTimetable(ctx context.Context, weekStart time.Time) ([]timetablemodels.ClassTimetableItem, error) {
 	userID, _ := ctx.Value("userID").(string)
 	classes, err := t.repo.GetClassesByUserId(ctx, userID)
@@ -32,11 +33,7 @@ func (t *TimetableService) GetOwnTimetable(ctx context.Context, weekStart time.T
 
 func (t *TimetableService) GetNodeTimetable(ctx context.Context, room string) ([]timetablemodels.ClassTimetableItem, error) {
 	now := time.Now().UTC()
-	weekday := now.Weekday()
-	dayOfWeek := int(weekday)
-	if weekday == 0 {
-		dayOfWeek = 7
-	}
+	dayOfWeek := datetime.WeekdayToDayOfWeek(now.Weekday())
 	currentTime := now.Format("15:04:05")
 	rows, err := t.repo.GetClassesByRoom(ctx, room, dayOfWeek, currentTime)
 	if err != nil {
@@ -73,6 +70,7 @@ var (
 	ErrClassNotRunning    = errors.New("class is not currently running")
 )
 
+// CanStudentSignIntoClass checks enrollment and that the class is currently running.
 func (t *TimetableService) CanStudentSignIntoClass(ctx context.Context, userID, classID string) error {
 	enrolled, err := t.repo.StudentEnrolledInClass(ctx, userID, classID)
 	if err != nil {
@@ -83,10 +81,7 @@ func (t *TimetableService) CanStudentSignIntoClass(ctx context.Context, userID, 
 	}
 
 	now := time.Now().UTC()
-	dayOfWeek := int(now.Weekday())
-	if now.Weekday() == 0 {
-		dayOfWeek = 7
-	}
+	dayOfWeek := datetime.WeekdayToDayOfWeek(now.Weekday())
 	currentTime := now.Format("15:04:05")
 
 	running, err := t.repo.ClassCurrentlyRunning(ctx, classID, dayOfWeek, currentTime)
@@ -104,11 +99,7 @@ func (t *TimetableService) GetClassesEndedRecently(ctx context.Context) ([]timet
 	now := time.Now().UTC()
 	windowStart := now.Add(-10 * time.Minute).Format(time.RFC3339)
 	nowStr := now.Format(time.RFC3339)
-	weekday := now.Weekday()
-	dayOfWeek := int(weekday)
-	if weekday == 0 {
-		dayOfWeek = 7
-	}
+	dayOfWeek := datetime.WeekdayToDayOfWeek(now.Weekday())
 	return t.repo.GetClassesEndedRecently(ctx, windowStart, nowStr, dayOfWeek)
 }
 

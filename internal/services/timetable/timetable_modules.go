@@ -20,7 +20,7 @@ func (t *TimetableService) CreateModule(ctx context.Context, moduleCode, moduleN
 	v.Add(validation.ModuleCodeFormat(moduleCode, "moduleCode"))
 	v.Add(validation.Required(moduleName, "moduleName"))
 	v.Add(validation.Alphanumeric(moduleName, "moduleName", true))
-	v.Add(validation.LengthRange(moduleName, "moduleName", 1, 100))
+	v.Add(validation.LengthRange(moduleName, "moduleName", 3, 50))
 	v.Add(validation.Required(startDate, "startDate"))
 	v.Add(validation.DateFormat(startDate, "startDate"))
 	v.Add(validation.Required(endDate, "endDate"))
@@ -58,8 +58,14 @@ func (t *TimetableService) GetModule(ctx context.Context, moduleID string) (*tim
 	return module, nil
 }
 
-func (t *TimetableService) GetModules(ctx context.Context, page, perPage int) ([]timetablemodels.Module, int, int, int, error) {
-	return pagination.Paginate(ctx, page, perPage, t.repo.GetModules, t.repo.GetModulesCount)
+func (t *TimetableService) GetModules(ctx context.Context, page, perPage int, search, sortBy, sortOrder string) (*pagination.Result[timetablemodels.Module], error) {
+	fetch := func(ctx context.Context, p, pp int) ([]timetablemodels.Module, error) {
+		return t.repo.GetModules(ctx, p, pp, search, sortBy, sortOrder)
+	}
+	count := func(ctx context.Context) (int, error) {
+		return t.repo.GetModulesCount(ctx, search)
+	}
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
 }
 
 func (t *TimetableService) UpdateModule(ctx context.Context, moduleID string, moduleCode, moduleName, startDate, endDate *string) error {
@@ -86,7 +92,7 @@ func (t *TimetableService) UpdateModule(ctx context.Context, moduleID string, mo
 	if moduleName != nil {
 		v.Add(validation.Required(*moduleName, "moduleName"))
 		v.Add(validation.Alphanumeric(*moduleName, "moduleName", true))
-		v.Add(validation.LengthRange(*moduleName, "moduleName", 1, 100))
+		v.Add(validation.LengthRange(*moduleName, "moduleName", 3, 50))
 	}
 	if startDate != nil {
 		v.Add(validation.Required(*startDate, "startDate"))

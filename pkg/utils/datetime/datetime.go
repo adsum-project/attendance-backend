@@ -2,6 +2,14 @@ package datetime
 
 import "time"
 
+// WeekdayToDayOfWeek converts time.Weekday (0=Sunday, 1=Monday, ...) to day-of-week (1=Monday, ..., 7=Sunday).
+func WeekdayToDayOfWeek(weekday time.Weekday) int {
+	if weekday == 0 {
+		return 7
+	}
+	return int(weekday)
+}
+
 func NormalizeWeekStart(t time.Time) time.Time {
 	d := t
 	day := d.Weekday()

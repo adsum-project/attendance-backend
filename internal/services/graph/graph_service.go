@@ -14,8 +14,10 @@ const graphBaseURL = "https://graph.microsoft.com/v1.0"
 
 type GraphService struct {
 	httpClient *http.Client
+	baseURL    string
 }
 
+// NewGraphService creates a Graph client with Entra app-only credentials.
 func NewGraphService() (*GraphService, error) {
 	clientID := os.Getenv("ENTRA_CLIENT_ID")
 	if clientID == "" {
@@ -43,5 +45,15 @@ func NewGraphService() (*GraphService, error) {
 
 	return &GraphService{
 		httpClient: httpClient,
+		baseURL:    graphBaseURL,
 	}, nil
+}
+
+// NewGraphServiceWithHTTPClient returns a GraphService using the given HTTP client and base URL.
+// Use for testing with httptest.Server; pass srv.URL as baseURL.
+func NewGraphServiceWithHTTPClient(client *http.Client, baseURL string) *GraphService {
+	if baseURL == "" {
+		baseURL = graphBaseURL
+	}
+	return &GraphService{httpClient: client, baseURL: baseURL}
 }

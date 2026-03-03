@@ -8,11 +8,12 @@ import (
 	timetablemodels "github.com/adsum-project/attendance-backend/internal/models/timetable"
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
+	"github.com/adsum-project/attendance-backend/pkg/utils/pagination"
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
-func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID string) ([]timetablemodels.CourseStudentEnrollment, error) {
+func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID string, page, perPage int) (*pagination.Result[timetablemodels.CourseStudentEnrollment], error) {
 	_, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrCourseNotFound) {
@@ -21,10 +22,11 @@ func (t *TimetableService) GetCourseStudents(ctx context.Context, courseID strin
 		return nil, err
 	}
 
-	assignments, err := t.repo.GetCourseStudents(ctx, courseID)
-	if err != nil {
-		return nil, err
-	}
+	fetch, count := pagination.BindIDAndMap(courseID, t.repo.GetCourseStudents, t.repo.GetCourseStudentsCount, t.enrichCourseStudents)
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
+}
+
+func (t *TimetableService) enrichCourseStudents(ctx context.Context, assignments []timetablemodels.CourseStudent) ([]timetablemodels.CourseStudentEnrollment, error) {
 	if len(assignments) == 0 {
 		return []timetablemodels.CourseStudentEnrollment{}, nil
 	}

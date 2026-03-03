@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,8 @@ func (p *VerificationProvider) GetRecords(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
 	classID := strings.TrimSpace(r.URL.Query().Get("classId"))
 	targetUserID := strings.TrimSpace(r.URL.Query().Get("userId"))
 
@@ -57,21 +60,21 @@ func (p *VerificationProvider) GetRecords(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if hasClassID {
-			records, err := p.verificationService.GetRecordsByClass(r.Context(), classID)
+			result, err := p.verificationService.GetRecordsByClass(r.Context(), classID, page, perPage)
 			if err != nil {
 				response.InternalServerError(w, "Failed to fetch attendance records")
 				return
 			}
-			response.OK(w, "", records)
+			response.PaginatedResponseFromResult(w, "", result)
 			return
 		}
 		if hasUserID {
-			records, err := p.verificationService.GetOwnRecords(r.Context(), targetUserID)
+			result, err := p.verificationService.GetOwnRecords(r.Context(), targetUserID, page, perPage)
 			if err != nil {
 				response.InternalServerError(w, "Failed to fetch attendance records")
 				return
 			}
-			response.OK(w, "", records)
+			response.PaginatedResponseFromResult(w, "", result)
 			return
 		}
 		response.JsonError(w, errs.BadRequest("Provide userId or classId to view attendance records"))
@@ -79,13 +82,12 @@ func (p *VerificationProvider) GetRecords(w http.ResponseWriter, r *http.Request
 	}
 
 	// Students: own records only, no params
-
-	records, err := p.verificationService.GetOwnRecords(r.Context(), userID)
+	result, err := p.verificationService.GetOwnRecords(r.Context(), userID, page, perPage)
 	if err != nil {
 		response.InternalServerError(w, "Failed to fetch attendance records")
 		return
 	}
-	response.OK(w, "", records)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *VerificationProvider) PatchRecordStatus(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +209,7 @@ func (p *VerificationProvider) handleEmbeddingRequest(w http.ResponseWriter, r *
 	response.JsonResponse(w, res.StatusCode, resBody)
 }
 
+// QRStream SSE endpoint that streams QR tokens for a class.
 func (p *VerificationProvider) QRStream(w http.ResponseWriter, r *http.Request) {
 	classID := strings.TrimSpace(r.URL.Query().Get("classId"))
 	if classID == "" {
@@ -262,6 +265,7 @@ func (p *VerificationProvider) QRStream(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// QRVerify signs in the user with a QR token.
 func (p *VerificationProvider) QRVerify(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token == "" {

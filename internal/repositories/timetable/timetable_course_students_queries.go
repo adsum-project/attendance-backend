@@ -30,13 +30,8 @@ func (r *TimetableRepository) CreateCourseStudent(ctx context.Context, courseID,
 }
 
 func (r *TimetableRepository) DeleteCourseStudent(ctx context.Context, courseID, userID string) error {
-	result, err := r.db.ExecContext(
-		ctx,
-		`DELETE FROM `+courseStudentsTable+`
-		WHERE `+query.Guid("course_id")+` = LOWER(@p1) AND `+query.Guid("user_id")+` = LOWER(@p2)`,
-		courseID,
-		userID,
-	)
+	q := `DELETE FROM ` + courseStudentsTable + ` WHERE ` + query.GuidWhere("course_id", "@p1") + ` AND ` + query.GuidWhere("user_id", "@p2")
+	result, err := r.db.ExecContext(ctx, q, courseID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to unassign student from course: %w", err)
 	}
@@ -47,32 +42,38 @@ func (r *TimetableRepository) DeleteCourseStudent(ctx context.Context, courseID,
 	return nil
 }
 
-func (r *TimetableRepository) GetCourseStudents(ctx context.Context, courseID string) ([]timetablemodels.CourseStudent, error) {
+func (r *TimetableRepository) GetCourseStudents(ctx context.Context, courseID string, page, perPage int) ([]timetablemodels.CourseStudent, error) {
+	baseQuery := `SELECT ` + query.Guid("course_id") + ` as course_id, ` + query.Guid("user_id") + ` as user_id, year_of_study
+		FROM ` + courseStudentsTable + `
+		WHERE ` + query.GuidWhere("course_id", "@p1") + `
+		ORDER BY user_id`
+	args := []any{courseID}
+	if page > 0 && perPage > 0 {
+		baseQuery += ` OFFSET @p2 ROWS FETCH NEXT @p3 ROWS ONLY`
+		args = append(args, (page-1)*perPage, perPage)
+	}
 	var students []timetablemodels.CourseStudent
-	err := r.db.SelectContext(
-		ctx,
-		&students,
-		`SELECT `+query.Guid("course_id")+` as course_id, `+query.Guid("user_id")+` as user_id, year_of_study
-		FROM `+courseStudentsTable+`
-		WHERE `+query.Guid("course_id")+` = LOWER(@p1)
-		ORDER BY user_id`,
-		courseID,
-	)
+	err := r.db.SelectContext(ctx, &students, baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get course students: %w", err)
 	}
 	return students, nil
 }
 
+func (r *TimetableRepository) GetCourseStudentsCount(ctx context.Context, courseID string) (int, error) {
+	var total int
+	q := `SELECT COUNT(*) FROM ` + courseStudentsTable + ` WHERE ` + query.GuidWhere("course_id", "@p1")
+	err := r.db.QueryRowContext(ctx, q, courseID).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count course students: %w", err)
+	}
+	return total, nil
+}
+
 func (r *TimetableRepository) CourseStudentExists(ctx context.Context, courseID, userID string) (bool, error) {
 	var exists int
-	err := r.db.QueryRowContext(
-		ctx,
-		`SELECT 1 FROM `+courseStudentsTable+`
-		WHERE `+query.Guid("course_id")+` = LOWER(@p1) AND `+query.Guid("user_id")+` = LOWER(@p2)`,
-		courseID,
-		userID,
-	).Scan(&exists)
+	q := `SELECT 1 FROM ` + courseStudentsTable + ` WHERE ` + query.GuidWhere("course_id", "@p1") + ` AND ` + query.GuidWhere("user_id", "@p2")
+	err := r.db.QueryRowContext(ctx, q, courseID, userID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil

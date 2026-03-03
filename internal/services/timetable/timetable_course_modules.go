@@ -8,10 +8,11 @@ import (
 	timetablerepo "github.com/adsum-project/attendance-backend/internal/repositories/timetable"
 	"github.com/adsum-project/attendance-backend/pkg/utils/authorization"
 	"github.com/adsum-project/attendance-backend/pkg/utils/errs"
+	"github.com/adsum-project/attendance-backend/pkg/utils/pagination"
 	"github.com/adsum-project/attendance-backend/pkg/utils/validation"
 )
 
-func (t *TimetableService) GetModuleCourses(ctx context.Context, moduleID string) ([]timetablemodels.ModuleCourse, error) {
+func (t *TimetableService) GetModuleCourses(ctx context.Context, moduleID string, page, perPage int) (*pagination.Result[timetablemodels.ModuleCourse], error) {
 	_, err := t.repo.GetModuleByID(ctx, moduleID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrModuleNotFound) {
@@ -19,10 +20,11 @@ func (t *TimetableService) GetModuleCourses(ctx context.Context, moduleID string
 		}
 		return nil, err
 	}
-	return t.repo.GetModuleCourses(ctx, moduleID)
+	fetch, count := pagination.BindID(moduleID, t.repo.GetModuleCourses, t.repo.GetModuleCoursesCount)
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
 }
 
-func (t *TimetableService) GetCourseModules(ctx context.Context, courseID string) ([]timetablemodels.CourseModule, error) {
+func (t *TimetableService) GetCourseModules(ctx context.Context, courseID string, page, perPage int) (*pagination.Result[timetablemodels.CourseModule], error) {
 	_, err := t.repo.GetCourseByID(ctx, courseID)
 	if err != nil {
 		if errors.Is(err, timetablerepo.ErrCourseNotFound) {
@@ -30,7 +32,8 @@ func (t *TimetableService) GetCourseModules(ctx context.Context, courseID string
 		}
 		return nil, err
 	}
-	return t.repo.GetCourseModules(ctx, courseID)
+	fetch, count := pagination.BindID(courseID, t.repo.GetCourseModules, t.repo.GetCourseModulesCount)
+	return pagination.Paginate(ctx, page, perPage, fetch, count)
 }
 
 func (t *TimetableService) AssignModuleToCourse(ctx context.Context, courseID, moduleID string, yearOfStudy int) error {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -12,12 +13,21 @@ import (
 func (p *TimetableProvider) GetModules(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
-	modules, total, page, perPage, err := p.timetable.GetModules(r.Context(), page, perPage)
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	sortBy := strings.TrimSpace(r.URL.Query().Get("sortBy"))
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sortOrder"))
+	if sortBy != "" && sortBy != "moduleCode" && sortBy != "moduleName" && sortBy != "startDate" && sortBy != "endDate" {
+		sortBy = ""
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = ""
+	}
+	result, err := p.timetable.GetModules(r.Context(), page, perPage, search, sortBy, sortOrder)
 	if err != nil {
 		response.JsonError(w, err)
 		return
 	}
-	response.PaginatedResponse(w, "", modules, page, perPage, total)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *TimetableProvider) GetModule(w http.ResponseWriter, r *http.Request) {
@@ -70,36 +80,4 @@ func (p *TimetableProvider) DeleteModule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	response.NoContent(w)
-}
-
-func (p *TimetableProvider) CreateModuleEnrollment(w http.ResponseWriter, r *http.Request) {
-	actorUserID, _ := r.Context().Value("userID").(string)
-	if actorUserID == "" {
-		response.Unauthorized(w, "Not authenticated")
-		return
-	}
-
-	_ = router.PathParam(r, "student_user_id")
-	_ = router.PathParam(r, "module_id")
-
-	response.JsonError(w, response.HttpErrorMessage{
-		StatusCode: http.StatusNotImplemented,
-		Error:      "CreateModuleEnrollment not implemented",
-	})
-}
-
-func (p *TimetableProvider) DeleteModuleEnrollment(w http.ResponseWriter, r *http.Request) {
-	actorUserID, _ := r.Context().Value("userID").(string)
-	if actorUserID == "" {
-		response.Unauthorized(w, "Not authenticated")
-		return
-	}
-
-	_ = router.PathParam(r, "student_user_id")
-	_ = router.PathParam(r, "module_id")
-
-	response.JsonError(w, response.HttpErrorMessage{
-		StatusCode: http.StatusNotImplemented,
-		Error:      "DeleteModuleEnrollment not implemented",
-	})
 }

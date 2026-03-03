@@ -14,20 +14,32 @@ const modulesTable = "modules"
 
 var ErrModuleNotFound = errors.New("module not found")
 
-func (r *TimetableRepository) GetModules(ctx context.Context, page, perPage int) ([]timetablemodels.Module, error) {
+func (r *TimetableRepository) GetModules(ctx context.Context, page, perPage int, search, sortBy, sortOrder string) ([]timetablemodels.Module, error) {
 	var modules []timetablemodels.Module
 	offset := (page - 1) * perPage
+	where := ""
+	args := []any{offset, perPage}
+	if search != "" {
+		where = " WHERE (module_code LIKE '%' + @p3 + '%' OR module_name LIKE '%' + @p3 + '%')"
+		args = append(args, search)
+	}
+	order := query.OrderBy(sortBy, sortOrder, "ORDER BY created_at", map[string]string{
+		"moduleCode": "module_code",
+		"moduleName": "module_name",
+		"startDate":  "start_date",
+		"endDate":    "end_date",
+	})
 	err := r.db.SelectContext(
 		ctx,
 		&modules,
 		`SELECT `+query.Guid("module_id")+` as module_id, module_code, module_name, `+query.Guid("owner_id")+` as owner_id,
-		CONVERT(VARCHAR(10), start_date, 23) as start_date, CONVERT(VARCHAR(10), end_date, 23) as end_date,
+		`+query.Date("start_date")+` as start_date, `+query.Date("end_date")+` as end_date,
 		created_at, updated_at
 		FROM `+modulesTable+`
-		ORDER BY created_at
+		`+where+`
+		`+order+`
 		OFFSET @p1 ROWS FETCH NEXT @p2 ROWS ONLY`,
-		offset,
-		perPage,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get modules: %w", err)
@@ -41,10 +53,10 @@ func (r *TimetableRepository) GetModuleByID(ctx context.Context, moduleID string
 		ctx,
 		&module,
 		`SELECT `+query.Guid("module_id")+` as module_id, module_code, module_name, `+query.Guid("owner_id")+` as owner_id,
-		CONVERT(VARCHAR(10), start_date, 23) as start_date, CONVERT(VARCHAR(10), end_date, 23) as end_date,
+		`+query.Date("start_date")+` as start_date, `+query.Date("end_date")+` as end_date,
 		created_at, updated_at
 		FROM `+modulesTable+`
-		WHERE `+query.Guid("module_id")+` = LOWER(@p1)`,
+		WHERE `+query.GuidWhere("module_id", "@p1")+``,
 		moduleID,
 	)
 	if err != nil {
@@ -56,9 +68,15 @@ func (r *TimetableRepository) GetModuleByID(ctx context.Context, moduleID string
 	return &module, nil
 }
 
-func (r *TimetableRepository) GetModulesCount(ctx context.Context) (int, error) {
+func (r *TimetableRepository) GetModulesCount(ctx context.Context, search string) (int, error) {
 	var total int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+modulesTable).Scan(&total)
+	q := `SELECT COUNT(*) FROM ` + modulesTable
+	args := []any{}
+	if search != "" {
+		q += ` WHERE (module_code LIKE '%' + @p1 + '%' OR module_name LIKE '%' + @p1 + '%')`
+		args = append(args, search)
+	}
+	err := r.db.QueryRowContext(ctx, q, args...).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count modules: %w", err)
 	}
@@ -108,7 +126,7 @@ func (r *TimetableRepository) UpdateModule(ctx context.Context, moduleID string,
 		"end_date":    endDate,
 	}, map[string]string{"start_date": "DATE", "end_date": "DATE"})
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE `+modulesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.Guid("module_id")+` = LOWER(`+nextParam+`)`,
+		`UPDATE `+modulesTable+` SET `+clause+`, updated_at = SYSUTCDATETIME() WHERE `+query.GuidWhere("module_id", nextParam),
 		append(args, moduleID)...,
 	)
 	if err != nil {
@@ -122,11 +140,8 @@ func (r *TimetableRepository) UpdateModule(ctx context.Context, moduleID string,
 }
 
 func (r *TimetableRepository) DeleteModule(ctx context.Context, moduleID string) error {
-	result, err := r.db.ExecContext(
-		ctx,
-		`DELETE FROM `+modulesTable+` WHERE `+query.Guid("module_id")+` = LOWER(@p1)`,
-		moduleID,
-	)
+	q := `DELETE FROM ` + modulesTable + ` WHERE ` + query.GuidWhere("module_id", "@p1")
+	result, err := r.db.ExecContext(ctx, q, moduleID)
 	if err != nil {
 		return fmt.Errorf("failed to delete module: %w", err)
 	}

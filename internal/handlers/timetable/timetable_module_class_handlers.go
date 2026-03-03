@@ -3,6 +3,7 @@ package timetablehandlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -10,13 +11,15 @@ import (
 
 func (p *TimetableProvider) GetClasses(w http.ResponseWriter, r *http.Request) {
 	moduleID := router.PathParam(r, "module_id")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
 
-	classes, err := p.timetable.GetClasses(r.Context(), moduleID)
+	result, err := p.timetable.GetClasses(r.Context(), moduleID, page, perPage)
 	if err != nil {
 		response.JsonError(w, err)
 		return
 	}
-	response.OK(w, "", classes)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *TimetableProvider) GetClass(w http.ResponseWriter, r *http.Request) {

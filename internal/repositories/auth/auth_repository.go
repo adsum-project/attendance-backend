@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +26,7 @@ type SessionRepository struct {
 	sessionTTL time.Duration
 }
 
+// NewSessionRepository creates the session store with the given TTL.
 func NewSessionRepository(db *sqlx.DB, sessionTTL time.Duration) *SessionRepository {
 	return &SessionRepository{
 		db:         db,
@@ -33,6 +34,7 @@ func NewSessionRepository(db *sqlx.DB, sessionTTL time.Duration) *SessionReposit
 	}
 }
 
+// CreateSession stores a session and returns a session token.
 func (r *SessionRepository) CreateSession(ctx context.Context, userID string, claims map[string]interface{}) (string, error) {
 	if r == nil || r.db == nil {
 		return "", fmt.Errorf("db is required")
@@ -41,7 +43,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID string, cl
 		return "", fmt.Errorf("userID is required")
 	}
 
-	token, err := generateSessionToken(32)
+	token, err := generateSessionToken()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate session token: %w", err)
 	}
@@ -67,6 +69,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID string, cl
 	return token, nil
 }
 
+// GetSession fetches a session by token. Returns ErrSessionNotFound if missing or expired.
 func (r *SessionRepository) GetSession(ctx context.Context, token string) (*authmodels.Session, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("db is required")
@@ -108,6 +111,7 @@ func (r *SessionRepository) GetSession(ctx context.Context, token string) (*auth
 	}, nil
 }
 
+// DeleteSession removes the session for the given token.
 func (r *SessionRepository) DeleteSession(ctx context.Context, token string) error {
 	if r == nil || r.db == nil || token == "" {
 		return nil
@@ -119,10 +123,10 @@ func (r *SessionRepository) DeleteSession(ctx context.Context, token string) err
 	return nil
 }
 
-func generateSessionToken(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
+func generateSessionToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(bytes)[:length], nil
+	return hex.EncodeToString(b), nil
 }

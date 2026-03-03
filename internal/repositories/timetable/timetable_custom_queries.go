@@ -20,17 +20,17 @@ func (r *TimetableRepository) GetClassesByUserId(ctx context.Context, userID str
 		&rows,
 		`SELECT `+query.Guid("cl.class_id")+` as class_id,
 		m.module_code, m.module_name,
-		CONVERT(VARCHAR(10), m.start_date, 23) as module_start_date, CONVERT(VARCHAR(10), m.end_date, 23) as module_end_date,
+		`+query.Date("m.start_date")+` as module_start_date, `+query.Date("m.end_date")+` as module_end_date,
 		c.course_code, c.course_name,
-		cl.class_name, UPPER(LTRIM(RTRIM(cl.room))) as room, cl.day_of_week,
-		CONVERT(VARCHAR(8), cl.starts_at, 108) as starts_at, CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
+		cl.class_name, `+query.Room("cl.room")+` as room, cl.day_of_week,
+		`+query.Time("cl.starts_at")+` as starts_at, `+query.Time("cl.ends_at")+` as ends_at,
 		cl.recurrence
 		FROM `+courseStudentsTable+` cs
 		INNER JOIN `+courseModulesTable+` cm ON cs.course_id = cm.course_id AND cs.year_of_study = cm.year_of_study
 		INNER JOIN `+modulesTable+` m ON cm.module_id = m.module_id
 		INNER JOIN `+classesTable+` cl ON m.module_id = cl.module_id
 		INNER JOIN `+coursesTable+` c ON cm.course_id = c.course_id
-		WHERE `+query.Guid("cs.user_id")+` = LOWER(@p1)
+		WHERE `+query.GuidWhere("cs.user_id", "@p1")+`
 		ORDER BY cl.day_of_week, cl.starts_at`,
 		userID,
 	)
@@ -47,16 +47,16 @@ func (r *TimetableRepository) GetClassesByRoom(ctx context.Context, room string,
 		&rows,
 		`SELECT `+query.Guid("cl.class_id")+` as class_id,
 		m.module_code, m.module_name,
-		CONVERT(VARCHAR(10), m.start_date, 23) as module_start_date, CONVERT(VARCHAR(10), m.end_date, 23) as module_end_date,
+		`+query.Date("m.start_date")+` as module_start_date, `+query.Date("m.end_date")+` as module_end_date,
 		c.course_code, c.course_name,
-		cl.class_name, UPPER(LTRIM(RTRIM(cl.room))) as room, cl.day_of_week,
-		CONVERT(VARCHAR(8), cl.starts_at, 108) as starts_at, CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
+		cl.class_name, `+query.Room("cl.room")+` as room, cl.day_of_week,
+		`+query.Time("cl.starts_at")+` as starts_at, `+query.Time("cl.ends_at")+` as ends_at,
 		cl.recurrence
 		FROM `+classesTable+` cl
 		INNER JOIN `+modulesTable+` m ON cl.module_id = m.module_id
 		INNER JOIN `+courseModulesTable+` cm ON m.module_id = cm.module_id
 		INNER JOIN `+coursesTable+` c ON cm.course_id = c.course_id
-		WHERE LOWER(LTRIM(RTRIM(cl.room))) = LOWER(LTRIM(RTRIM(@p1)))
+		WHERE `+query.Room("cl.room")+` = UPPER(LTRIM(RTRIM(@p1)))
 		AND cl.day_of_week = @p2
 		AND CAST(@p3 AS TIME) >= cl.starts_at AND CAST(@p3 AS TIME) <= cl.ends_at
 		AND CAST(SYSUTCDATETIME() AS DATE) >= m.start_date AND CAST(SYSUTCDATETIME() AS DATE) <= m.end_date
@@ -73,13 +73,8 @@ func (r *TimetableRepository) GetClassesByRoom(ctx context.Context, room string,
 
 func (r *TimetableRepository) GetNodeRoomByUserID(ctx context.Context, userID string) (string, error) {
 	var room string
-	err := r.db.GetContext(
-		ctx,
-		&room,
-		`SELECT UPPER(LTRIM(RTRIM(room))) as room FROM `+nodeRoomTable+`
-		WHERE `+query.Guid("user_id")+` = LOWER(@p1)`,
-		userID,
-	)
+	q := `SELECT ` + query.Room("room") + ` as room FROM ` + nodeRoomTable + ` WHERE ` + query.GuidWhere("user_id", "@p1")
+	err := r.db.GetContext(ctx, &room, q, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil
@@ -112,12 +107,8 @@ func (r *TimetableRepository) UpsertNodeRoom(ctx context.Context, userID, room s
 }
 
 func (r *TimetableRepository) DeleteNodeRoom(ctx context.Context, userID string) error {
-	result, err := r.db.ExecContext(
-		ctx,
-		`DELETE FROM `+nodeRoomTable+`
-		WHERE `+query.Guid("user_id")+` = LOWER(@p1)`,
-		userID,
-	)
+	q := `DELETE FROM ` + nodeRoomTable + ` WHERE ` + query.GuidWhere("user_id", "@p1")
+	result, err := r.db.ExecContext(ctx, q, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete node room: %w", err)
 	}
@@ -130,15 +121,11 @@ func (r *TimetableRepository) DeleteNodeRoom(ctx context.Context, userID string)
 
 func (r *TimetableRepository) StudentEnrolledInClass(ctx context.Context, userID, classID string) (bool, error) {
 	var exists int
-	err := r.db.QueryRowContext(
-		ctx,
-		`SELECT 1 FROM `+classesTable+` cl
-		INNER JOIN `+courseModulesTable+` cm ON cl.module_id = cm.module_id
-		INNER JOIN `+courseStudentsTable+` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cs.year_of_study
-		WHERE `+query.Guid("cl.class_id")+` = LOWER(@p1) AND `+query.Guid("cs.user_id")+` = LOWER(@p2)`,
-		classID,
-		userID,
-	).Scan(&exists)
+	q := `SELECT 1 FROM ` + classesTable + ` cl
+		INNER JOIN ` + courseModulesTable + ` cm ON cl.module_id = cm.module_id
+		INNER JOIN ` + courseStudentsTable + ` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cs.year_of_study
+		WHERE ` + query.GuidWhere("cl.class_id", "@p1") + ` AND ` + query.GuidWhere("cs.user_id", "@p2")
+	err := r.db.QueryRowContext(ctx, q, classID, userID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -150,18 +137,13 @@ func (r *TimetableRepository) StudentEnrolledInClass(ctx context.Context, userID
 
 func (r *TimetableRepository) ClassCurrentlyRunning(ctx context.Context, classID string, dayOfWeek int, currentTime string) (bool, error) {
 	var exists int
-	err := r.db.QueryRowContext(
-		ctx,
-		`SELECT 1 FROM `+classesTable+` cl
-		INNER JOIN `+modulesTable+` m ON cl.module_id = m.module_id
-		WHERE `+query.Guid("cl.class_id")+` = LOWER(@p1)
+	q := `SELECT 1 FROM ` + classesTable + ` cl
+		INNER JOIN ` + modulesTable + ` m ON cl.module_id = m.module_id
+		WHERE ` + query.GuidWhere("cl.class_id", "@p1") + `
 		AND cl.day_of_week = @p2
 		AND CAST(@p3 AS TIME) >= cl.starts_at AND CAST(@p3 AS TIME) <= cl.ends_at
-		AND CAST(SYSUTCDATETIME() AS DATE) >= m.start_date AND CAST(SYSUTCDATETIME() AS DATE) <= m.end_date`,
-		classID,
-		dayOfWeek,
-		currentTime,
-	).Scan(&exists)
+		AND CAST(SYSUTCDATETIME() AS DATE) >= m.start_date AND CAST(SYSUTCDATETIME() AS DATE) <= m.end_date`
+	err := r.db.QueryRowContext(ctx, q, classID, dayOfWeek, currentTime).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -188,10 +170,10 @@ func (r *TimetableRepository) GetClassesEndedRecently(ctx context.Context, windo
 		ctx,
 		&rows,
 		`SELECT `+query.Guid("cl.class_id")+` as class_id,
-		CONVERT(VARCHAR(8), cl.ends_at, 108) as ends_at,
+		`+query.Time("cl.ends_at")+` as ends_at,
 		cl.day_of_week,
-		CONVERT(VARCHAR(10), CAST(SYSUTCDATETIME() AS DATE), 23) as occurrence_date,
-		CONVERT(VARCHAR(33), occurrence_end, 127) as occurrence_end_at
+		`+query.Date("CAST(SYSUTCDATETIME() AS DATE)")+` as occurrence_date,
+		`+query.DateTimeISO("occurrence_end")+` as occurrence_end_at
 		FROM `+classesTable+` cl
 		INNER JOIN `+modulesTable+` m ON cl.module_id = m.module_id
 		CROSS APPLY (
@@ -213,16 +195,12 @@ func (r *TimetableRepository) GetEnrolledUserIDsForClass(ctx context.Context, cl
 	var rows []struct {
 		UserID string `db:"user_id"`
 	}
-	err := r.db.SelectContext(
-		ctx,
-		&rows,
-		`SELECT `+query.Guid("cs.user_id")+` as user_id
-		FROM `+classesTable+` cl
-		INNER JOIN `+courseModulesTable+` cm ON cl.module_id = cm.module_id
-		INNER JOIN `+courseStudentsTable+` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cs.year_of_study
-		WHERE `+query.Guid("cl.class_id")+` = LOWER(@p1)`,
-		classID,
-	)
+	q := `SELECT ` + query.Guid("cs.user_id") + ` as user_id
+		FROM ` + classesTable + ` cl
+		INNER JOIN ` + courseModulesTable + ` cm ON cl.module_id = cm.module_id
+		INNER JOIN ` + courseStudentsTable + ` cs ON cm.course_id = cs.course_id AND cm.year_of_study = cm.year_of_study
+		WHERE ` + query.GuidWhere("cl.class_id", "@p1")
+	err := r.db.SelectContext(ctx, &rows, q, classID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get enrolled users: %w", err)
 	}

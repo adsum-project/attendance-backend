@@ -36,6 +36,22 @@ func main() {
 		}
 	}
 
+	setupGlobalMiddleware(r)
+
+	dbConn, err := db.OpenFromEnv()
+	if err != nil {
+		log.Fatal("Error initializing db: ", err)
+	}
+	defer dbConn.Close()
+
+	dbProvider := db.NewDbProvider(dbConn)
+
+	setupServicesAndRoutes(r, dbProvider)
+
+	r.StartServer(":8080")
+}
+
+func setupGlobalMiddleware(r *router.Router) {
 	getCORSOrigins := func() []string {
 		origins := os.Getenv("CORS_ORIGINS")
 		if origins == "" {
@@ -55,15 +71,9 @@ func main() {
 
 	r.Use(corsMiddleware)
 	r.Use(middleware.NewRequestLogger())
+}
 
-	dbConn, err := db.OpenFromEnv()
-	if err != nil {
-		log.Fatal("Error initializing db: ", err)
-	}
-	defer dbConn.Close()
-
-	dbProvider := db.NewDbProvider(dbConn)
-
+func setupServicesAndRoutes(r *router.Router, dbProvider *db.DbProvider) {
 	sessionRepo := authrepo.NewSessionRepository(
 		dbProvider.DB,
 		time.Duration(auth.DefaultCookieMaxAge)*time.Second,
@@ -93,7 +103,7 @@ func main() {
 	}
 
 	verificationRepo := verificationrepo.NewVerificationRepository(dbProvider.DB)
-	verificationService, err := verification.NewVerificationService(verificationRepo, timetableService)
+	verificationService, err := verification.NewVerificationService(verificationRepo, timetableService, graphService)
 	if err != nil {
 		log.Fatal("Error initializing verification service: ", err)
 	}
@@ -174,6 +184,4 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		response.OK(w, "API is running", map[string]string{"since": serverStartTime})
 	})
-
-	r.StartServer(":8080")
 }

@@ -3,6 +3,7 @@ package timetablehandlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/adsum-project/attendance-backend/pkg/router"
 	"github.com/adsum-project/attendance-backend/pkg/utils/response"
@@ -10,24 +11,28 @@ import (
 
 func (p *TimetableProvider) GetModuleCourses(w http.ResponseWriter, r *http.Request) {
 	moduleID := router.PathParam(r, "module_id")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
 
-	courses, err := p.timetable.GetModuleCourses(r.Context(), moduleID)
+	result, err := p.timetable.GetModuleCourses(r.Context(), moduleID, page, perPage)
 	if err != nil {
 		response.JsonError(w, err)
 		return
 	}
-	response.OK(w, "", courses)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *TimetableProvider) GetCourseModules(w http.ResponseWriter, r *http.Request) {
 	courseID := router.PathParam(r, "course_id")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
 
-	modules, err := p.timetable.GetCourseModules(r.Context(), courseID)
+	result, err := p.timetable.GetCourseModules(r.Context(), courseID, page, perPage)
 	if err != nil {
 		response.JsonError(w, err)
 		return
 	}
-	response.OK(w, "", modules)
+	response.PaginatedResponseFromResult(w, "", result)
 }
 
 func (p *TimetableProvider) AssignModuleToCourse(w http.ResponseWriter, r *http.Request) {
