@@ -1,0 +1,714 @@
+{
+  "info": {
+    "name": "Adsum Attendance API",
+    "description": "Functional API tests. **Requires auth**: Copy session cookie from browser (e.g. cookie extension) into Postman before running. Tests create real data, verify responses, and clean up. Run collection in order.",
+    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "courseId", "value": "" },
+    { "key": "moduleId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "testCourseCode", "value": "9001" },
+    { "key": "testModuleCode", "value": "PMT001" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "if (!pm.collectionVariables.get('courseId')) {",
+          "  const r = () => Math.floor(Math.random() * 1000);",
+          "  pm.collectionVariables.set('testCourseCode', '9' + String(r()).padStart(3, '0'));",
+          "  pm.collectionVariables.set('testModuleCode', 'PMT' + String(r()).padStart(3, '0'));",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0 - Prerequisites",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('API is up', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Health response structure', () => {",
+                "  pm.expect(j.success).to.be.true;",
+                "  pm.expect(j.data).to.have.property('since');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Auth Me (verify session)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/auth/me"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Authenticated', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('User object present', () => {",
+                "  pm.expect(j.success).to.be.true;",
+                "  pm.expect(j.data.user).to.be.an('object');",
+                "  pm.expect(j.data.user).to.have.property('id');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "1 - Course CRUD",
+      "item": [
+        {
+          "name": "Create Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseCode\": \"{{testCourseCode}}\",\n  \"courseName\": \"Postman Test Course\",\n  \"campus\": \"Test Campus\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/courses"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course created', () => pm.response.to.have.status(201));",
+                "const j = pm.response.json();",
+                "pm.test('Returns courseId', () => {",
+                "  pm.expect(j.data.courseId).to.be.a('string');",
+                "  pm.expect(j.data.courseId.length).to.be.greaterThan(0);",
+                "});",
+                "if (pm.response.code === 201) pm.collectionVariables.set('courseId', j.data.courseId);"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course retrieved', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Course data matches created values', () => {",
+                "  pm.expect(j.data.courseCode).to.eql(pm.collectionVariables.get('testCourseCode'));",
+                "  pm.expect(j.data.courseName).to.eql('Postman Test Course');",
+                "  pm.expect(j.data.campus).to.eql('Test Campus');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Update Course",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseName\": \"Postman Test Course Updated\",\n  \"campus\": \"Updated Campus\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course updated', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Course (verify update)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Updated values persisted', () => {",
+                "  const j = pm.response.json();",
+                "  pm.expect(j.data.courseName).to.eql('Postman Test Course Updated');",
+                "  pm.expect(j.data.campus).to.eql('Updated Campus');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "2 - Module CRUD",
+      "item": [
+        {
+          "name": "Create Module",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleCode\": \"{{testModuleCode}}\",\n  \"moduleName\": \"Postman Test Module\",\n  \"startDate\": \"2025-01-06\",\n  \"endDate\": \"2025-06-30\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/modules"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module created', () => pm.response.to.have.status(201));",
+                "const j = pm.response.json();",
+                "pm.test('Returns moduleId', () => pm.expect(j.data.moduleId).to.be.a('string'));",
+                "if (pm.response.code === 201) pm.collectionVariables.set('moduleId', j.data.moduleId);"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Module",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module retrieved', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Module data correct', () => {",
+                "  pm.expect(j.data.moduleCode).to.eql(pm.collectionVariables.get('testModuleCode'));",
+                "  pm.expect(j.data.moduleName).to.eql('Postman Test Module');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Update Module",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleName\": \"Postman Test Module Updated\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module updated', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Module (verify update)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Updated module name persisted', () => {",
+                "  const j = pm.response.json();",
+                "  pm.expect(j.data.moduleName).to.eql('Postman Test Module Updated');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "3 - Course-Module Association",
+      "item": [
+        {
+          "name": "Assign Module to Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"yearOfStudy\": 1\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module assigned to course', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Course Modules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}/modules?page=1&perPage=10"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course modules returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Assigned module in list', () => {",
+                "  pm.expect(j.data).to.be.an('array');",
+                "  const mod = j.data.find(m => m.moduleId === pm.collectionVariables.get('moduleId'));",
+                "  pm.expect(mod).to.be.an('object');",
+                "});",
+                "pm.test('Pagination meta present', () => pm.expect(j.meta).to.have.property('total'));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Unassign Module from Course",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module unassigned', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Course Modules (empty)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}/modules"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module no longer in list', () => {",
+                "  const j = pm.response.json();",
+                "  const mod = (j.data || []).find(m => m.moduleId === pm.collectionVariables.get('moduleId'));",
+                "  pm.expect(mod).to.be.undefined;",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "4 - Class CRUD",
+      "item": [
+        {
+          "name": "Create Class",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"className\": \"Postman Test Class\",\n  \"room\": \"Room A101\",\n  \"dayOfWeek\": 1,\n  \"startsAt\": \"09:00\",\n  \"endsAt\": \"10:00\",\n  \"recurrence\": \"weekly\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Class created', () => pm.response.to.have.status(201));",
+                "const j = pm.response.json();",
+                "pm.test('Returns classId', () => pm.expect(j.data.classId).to.be.a('string'));",
+                "if (pm.response.code === 201) pm.collectionVariables.set('classId', j.data.classId);"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Class",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes/{{classId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Class retrieved', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Class data correct', () => {",
+                "  pm.expect(j.data.className).to.eql('Postman Test Class');",
+                "  pm.expect(j.data.room).to.eql('Room A101');",
+                "  pm.expect(j.data.dayOfWeek).to.eql(1);",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Classes (list)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes?page=1&perPage=10"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Class in list', () => {",
+                "  const j = pm.response.json();",
+                "  const cls = (j.data || []).find(c => c.classId === pm.collectionVariables.get('classId'));",
+                "  pm.expect(cls).to.be.an('object');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Update Class",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"className\": \"Postman Test Class Updated\",\n  \"room\": \"Room B202\"\n}\n"
+            },
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes/{{classId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Class updated', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Class (verify update)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes/{{classId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Updated class data persisted', () => {",
+                "  const j = pm.response.json();",
+                "  pm.expect(j.data.className).to.eql('Postman Test Class Updated');",
+                "  pm.expect(j.data.room).to.eql('Room B202');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "5 - Timetable & Pagination",
+      "item": [
+        {
+          "name": "Get Own Timetable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/me?weekStart=2025-01-06"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Timetable returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Data is array', () => pm.expect(j.data).to.be.an('array'));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Courses (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses?page=1&perPage=5&search=Postman"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Paginated courses returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Pagination meta', () => {",
+                "  pm.expect(j.meta).to.have.property('page');",
+                "  pm.expect(j.meta).to.have.property('perPage');",
+                "  pm.expect(j.meta).to.have.property('total');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Modules (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules?page=1&perPage=5&search=Postman"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Paginated modules returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Test module in results', () => {",
+                "  const mod = (j.data || []).find(m => m.moduleCode === pm.collectionVariables.get('testModuleCode'));",
+                "  pm.expect(mod).to.be.an('object');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Module Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/courses?page=1&perPage=10"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module courses returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.expect(j.data).to.be.an('array');"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "6 - Verification",
+      "item": [
+        {
+          "name": "Get Embedding Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/verification/embeddings"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Embedding status returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Exists field present', () => pm.expect(j.data || j).to.have.property('exists'));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Records (own)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/verification/records?page=1&perPage=10"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Records returned', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('Paginated structure', () => {",
+                "  pm.expect(j.data).to.be.an('array');",
+                "  if (j.meta) pm.expect(j.meta).to.have.property('total');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "7 - Users (admin/staff)",
+      "item": [
+        {
+          "name": "Get Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/users?page=1&perPage=5"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "if (pm.response.code === 200) {",
+                "  pm.test('Users list returned', () => pm.response.to.have.status(200));",
+                "  const j = pm.response.json();",
+                "  pm.test('Users array or paginated', () => {",
+                "    pm.expect(j.data).to.be.an('array');",
+                "  });",
+                "} else {",
+                "  pm.test('403 if not admin/staff - acceptable', () => pm.expect(pm.response.code).to.be.oneOf([200, 403]));",
+                "}"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "8 - Cleanup",
+      "item": [
+        {
+          "name": "Delete Class",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}/classes/{{classId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Class deleted', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Delete Module",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/modules/{{moduleId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Module deleted', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Delete Course",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course deleted', () => pm.response.to.have.status(204));"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        },
+        {
+          "name": "Get Course (verify 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Course no longer exists', () => pm.response.to.have.status(404));",
+                "pm.collectionVariables.set('courseId', '');",
+                "pm.collectionVariables.set('moduleId', '');",
+                "pm.collectionVariables.set('classId', '');"
+              ],
+              "type": "text/javascript"
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}

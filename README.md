@@ -52,13 +52,23 @@ The API listens on `:8080`. Health check: `GET /health`.
 
 ## Testing
 
-Run all tests:
+### Go unit / integration tests
 
 ```bash
 go test ./...
 ```
 
 Some tests require `EMBEDDINGS_API_URL` to be set (e.g. `http://localhost:9999` for mocked endpoints). Ensure the embeddings service is reachable if running integration-style tests.
+
+### Postman / Newman API tests
+
+Automated Postman tests live in `postman/`. With the API running:
+
+```bash
+newman run postman/Adsum-Attendance-API.postman_collection.json -e postman/Adsum-Local.postman_environment.json
+```
+
+See [postman/README.md](postman/README.md) for details.
 
 ## Environment Variables
 
