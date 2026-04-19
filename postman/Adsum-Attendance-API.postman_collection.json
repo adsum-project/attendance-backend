@@ -17,10 +17,14 @@
       "listen": "prerequest",
       "script": {
         "exec": [
-          "if (!pm.collectionVariables.get('courseId')) {",
+          "if (!pm.collectionVariables.get('runInitialized')) {",
           "  const r = () => Math.floor(Math.random() * 1000);",
+          "  pm.collectionVariables.set('courseId', '');",
+          "  pm.collectionVariables.set('moduleId', '');",
+          "  pm.collectionVariables.set('classId', '');",
           "  pm.collectionVariables.set('testCourseCode', '9' + String(r()).padStart(3, '0'));",
           "  pm.collectionVariables.set('testModuleCode', 'PMT' + String(r()).padStart(3, '0'));",
+          "  pm.collectionVariables.set('runInitialized', 'true');",
           "}"
         ],
         "type": "text/javascript"
@@ -64,13 +68,21 @@
             "listen": "test",
             "script": {
               "exec": [
-                "pm.test('Authenticated', () => pm.response.to.have.status(200));",
                 "const j = pm.response.json();",
+                "pm.test('Authenticated', () => pm.response.to.have.status(200));",
                 "pm.test('User object present', () => {",
                 "  pm.expect(j.success).to.be.true;",
                 "  pm.expect(j.data.user).to.be.an('object');",
                 "  pm.expect(j.data.user).to.have.property('id');",
-                "});"
+                "});",
+                "if (pm.response.code === 200) {",
+                "  pm.collectionVariables.set('authUserId', j.data.user.id);",
+                "  pm.collectionVariables.set('authRoles', JSON.stringify(j.data.user.roles || []));",
+                "}",
+                "if (pm.response.code !== 200) {",
+                "  pm.collectionVariables.unset('runInitialized');",
+                "  pm.execution.setNextRequest(null);",
+                "}"
               ],
               "type": "text/javascript"
             }
@@ -88,7 +100,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"courseCode\": \"{{testCourseCode}}\",\n  \"courseName\": \"Postman Test Course\",\n  \"campus\": \"Test Campus\"\n}\n"
+              "raw": "{\n  \"courseCode\": \"{{testCourseCode}}\",\n  \"courseName\": \"Postman Test Course\",\n  \"campus\": \"TestCampus\"\n}\n"
             },
             "url": "{{baseUrl}}/v1/timetable/courses"
           },
@@ -96,13 +108,18 @@
             "listen": "test",
             "script": {
               "exec": [
-                "pm.test('Course created', () => pm.response.to.have.status(201));",
                 "const j = pm.response.json();",
+                "pm.test('Course created', () => pm.response.to.have.status(201));",
                 "pm.test('Returns courseId', () => {",
                 "  pm.expect(j.data.courseId).to.be.a('string');",
                 "  pm.expect(j.data.courseId.length).to.be.greaterThan(0);",
                 "});",
-                "if (pm.response.code === 201) pm.collectionVariables.set('courseId', j.data.courseId);"
+                "if (pm.response.code === 201) {",
+                "  pm.collectionVariables.set('courseId', j.data.courseId);",
+                "} else {",
+                "  pm.collectionVariables.unset('runInitialized');",
+                "  pm.execution.setNextRequest(null);",
+                "}"
               ],
               "type": "text/javascript"
             }
@@ -124,7 +141,7 @@
                 "pm.test('Course data matches created values', () => {",
                 "  pm.expect(j.data.courseCode).to.eql(pm.collectionVariables.get('testCourseCode'));",
                 "  pm.expect(j.data.courseName).to.eql('Postman Test Course');",
-                "  pm.expect(j.data.campus).to.eql('Test Campus');",
+                "  pm.expect(j.data.campus).to.eql('TestCampus');",
                 "});"
               ],
               "type": "text/javascript"
@@ -138,7 +155,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"courseName\": \"Postman Test Course Updated\",\n  \"campus\": \"Updated Campus\"\n}\n"
+              "raw": "{\n  \"courseName\": \"Postman Test Course Updated\",\n  \"campus\": \"UpdatedCampus\"\n}\n"
             },
             "url": "{{baseUrl}}/v1/timetable/courses/{{courseId}}"
           },
@@ -166,7 +183,7 @@
                 "pm.test('Updated values persisted', () => {",
                 "  const j = pm.response.json();",
                 "  pm.expect(j.data.courseName).to.eql('Postman Test Course Updated');",
-                "  pm.expect(j.data.campus).to.eql('Updated Campus');",
+                "  pm.expect(j.data.campus).to.eql('UpdatedCampus');",
                 "});"
               ],
               "type": "text/javascript"
@@ -193,10 +210,15 @@
             "listen": "test",
             "script": {
               "exec": [
-                "pm.test('Module created', () => pm.response.to.have.status(201));",
                 "const j = pm.response.json();",
+                "pm.test('Module created', () => pm.response.to.have.status(201));",
                 "pm.test('Returns moduleId', () => pm.expect(j.data.moduleId).to.be.a('string'));",
-                "if (pm.response.code === 201) pm.collectionVariables.set('moduleId', j.data.moduleId);"
+                "if (pm.response.code === 201) {",
+                "  pm.collectionVariables.set('moduleId', j.data.moduleId);",
+                "} else {",
+                "  pm.collectionVariables.unset('runInitialized');",
+                "  pm.execution.setNextRequest(null);",
+                "}"
               ],
               "type": "text/javascript"
             }
@@ -373,10 +395,15 @@
             "listen": "test",
             "script": {
               "exec": [
-                "pm.test('Class created', () => pm.response.to.have.status(201));",
                 "const j = pm.response.json();",
+                "pm.test('Class created', () => pm.response.to.have.status(201));",
                 "pm.test('Returns classId', () => pm.expect(j.data.classId).to.be.a('string'));",
-                "if (pm.response.code === 201) pm.collectionVariables.set('classId', j.data.classId);"
+                "if (pm.response.code === 201) {",
+                "  pm.collectionVariables.set('classId', j.data.classId);",
+                "} else {",
+                "  pm.collectionVariables.unset('runInitialized');",
+                "  pm.execution.setNextRequest(null);",
+                "}"
               ],
               "type": "text/javascript"
             }
@@ -392,12 +419,12 @@
           "event": [{
             "listen": "test",
             "script": {
-              "exec": [
+                "exec": [
                 "pm.test('Class retrieved', () => pm.response.to.have.status(200));",
                 "const j = pm.response.json();",
                 "pm.test('Class data correct', () => {",
                 "  pm.expect(j.data.className).to.eql('Postman Test Class');",
-                "  pm.expect(j.data.room).to.eql('Room A101');",
+                "  pm.expect(j.data.room).to.eql('ROOM A101');",
                 "  pm.expect(j.data.dayOfWeek).to.eql(1);",
                 "});"
               ],
@@ -457,11 +484,11 @@
           "event": [{
             "listen": "test",
             "script": {
-              "exec": [
+                "exec": [
                 "pm.test('Updated class data persisted', () => {",
                 "  const j = pm.response.json();",
                 "  pm.expect(j.data.className).to.eql('Postman Test Class Updated');",
-                "  pm.expect(j.data.room).to.eql('Room B202');",
+                "  pm.expect(j.data.room).to.eql('ROOM B202');",
                 "});"
               ],
               "type": "text/javascript"
@@ -484,9 +511,15 @@
             "listen": "test",
             "script": {
               "exec": [
-                "pm.test('Timetable returned', () => pm.response.to.have.status(200));",
                 "const j = pm.response.json();",
-                "pm.test('Data is array', () => pm.expect(j.data).to.be.an('array'));"
+                "const roles = JSON.parse(pm.collectionVariables.get('authRoles') || '[]');",
+                "const isDefaultOnly = roles.includes('default') && !roles.includes('admin') && !roles.includes('staff');",
+                "if (isDefaultOnly) {",
+                "  pm.test('Timetable returned', () => pm.response.to.have.status(200));",
+                "  pm.test('Data is array', () => pm.expect(j.data).to.be.an('array'));",
+                "} else {",
+                "  pm.test('Timetable forbidden for non-default roles', () => pm.expect(pm.response.code).to.eql(403));",
+                "}"
               ],
               "type": "text/javascript"
             }
@@ -585,7 +618,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/v1/verification/records?page=1&perPage=10"
+            "url": "{{baseUrl}}/v1/verification/records?page=1&perPage=10&userId={{authUserId}}"
           },
           "event": [{
             "listen": "test",
@@ -702,7 +735,8 @@
                 "pm.test('Course no longer exists', () => pm.response.to.have.status(404));",
                 "pm.collectionVariables.set('courseId', '');",
                 "pm.collectionVariables.set('moduleId', '');",
-                "pm.collectionVariables.set('classId', '');"
+                "pm.collectionVariables.set('classId', '');",
+                "pm.collectionVariables.unset('runInitialized');"
               ],
               "type": "text/javascript"
             }
